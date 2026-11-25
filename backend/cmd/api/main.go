@@ -2,25 +2,22 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/imovxen/backend/internal/auth"
 	"github.com/imovxen/backend/internal/config"
 	"github.com/imovxen/backend/internal/db"
+	"github.com/imovxen/backend/internal/leads"
 	"github.com/imovxen/backend/internal/properties"
 	"github.com/imovxen/backend/internal/storage"
+	"github.com/imovxen/backend/internal/users"
 )
 
 func main() {
@@ -44,6 +41,12 @@ func main() {
 	tokenService := auth.NewTokenService(cfg.JWTSecret, cfg.JWTTTLMinutes, cfg.RefreshTokenTTLDays)
 	storageService := storage.NewStorageService(cfg)
 	_ = storageService
+
+	// Handlers de domínio
+	authHandler := auth.NewHandler(database, tokenService)
+	usersHandler := users.NewHandler(database, tokenService)
+	propertiesHandler := properties.NewHandler(database, tokenService)
+	leadsHandler := leads.NewHandler(database, tokenService)
 
 	r := gin.Default()
 
@@ -69,479 +72,33 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		// ==========================================
-		// UPLOAD REAL COM PROCESSAMENTO & COMPRESSÃO AUTOMÁTICA
-		// ==========================================
-		api.POST("/upload", func(c *gin.Context) {
-			form, err := c.MultipartForm()
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao processar formulário de upload"})
-				return
-			}
+		// Upload real com compressão Lanczos3
+		api.POST("/upload", propertiesHandler.UploadPhotos)
 
-			files := form.File["photos"]
-			if len(files) == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Nenhum arquivo enviado"})
-				return
-			}
-
-			var fileURLs []string
-			for _, file := range files {
-				fileName := fmt.Sprintf("%s.jpg", uuid.New().String())
-				dstPath := filepath.Join("./uploads", fileName)
-
-				src, err := file.Open()
-				if err != nil {
-					continue
-				}
-
-				// Processa, redimensiona (max 1600px Lanczos3) e comprime a imagem automaticamente
-				err = storage.ProcessAndOptimizeImage(src, dstPath)
-				src.Close()
-
-				if err != nil {
-					// Fallback de segurança se o formato for exótico
-					srcFallback, _ := file.Open()
-					dstFallback, _ := os.Create(dstPath)
-					_, _ = io.Copy(dstFallback, srcFallback)
-					srcFallback.Close()
-					dstFallback.Close()
-				}
-
-				fileURLs = append(fileURLs, "http://localhost:8080/uploads/"+fileName)
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"urls": fileURLs,
-			})
-		})
-
-		// ==========================================
-		// AUTH
-		// ==========================================
+		// Auth
 		authGroup := api.Group("/auth")
 		{
-			authGroup.POST("/register", func(c *gin.Context) {
-				var req struct {
-					Name     string `json:"name" binding:"required"`
-					Email    string `json:"email" binding:"required,email"`
-					Password string `json:"password" binding:"required,min=6"`
-					Phone    string `json:"phone"`
-				}
-				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-
-				passHash, err := auth.HashPassword(req.Password)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar senha"})
-					return
-				}
-
-				var phonePtr *string
-				if req.Phone != "" {
-					phonePtr = &req.Phone
-				}
-
-				user, err := database.Queries.CreateUser(c.Request.Context(), db.CreateUserParams{
-					Email:        req.Email,
-					PasswordHash: passHash,
-					Name:         req.Name,
-					Phone:        phonePtr,
-					Role:         "USER",
-					PlanType:     "FREE",
-					ListingQuota: 2,
-				})
-				if err != nil {
-					c.JSON(http.StatusConflict, gin.H{"error": "E-mail já cadastrado"})
-					return
-				}
-
-				accessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
-				rawRefresh, hashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
-				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-					UserID:    user.ID,
-					TokenHash: hashRefresh,
-					ExpiresAt: expiresAt,
-				})
-
-				c.JSON(http.StatusCreated, gin.H{
-					"id":            user.ID,
-					"access_token":  accessToken,
-					"refresh_token": rawRefresh,
-					"user": gin.H{
-						"id":            user.ID,
-						"name":          user.Name,
-						"email":         user.Email,
-						"phone":         user.Phone,
-						"cpf_cnpj":      user.CpfCnpj,
-						"role":          user.Role,
-						"listing_quota": user.ListingQuota,
-						"listings_used": user.ListingsUsed,
-					},
-				})
-			})
-
-			authGroup.POST("/login", func(c *gin.Context) {
-				var req struct {
-					Email    string `json:"email" binding:"required,email"`
-					Password string `json:"password" binding:"required"`
-				}
-				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-
-				user, err := database.Queries.GetUserByEmail(c.Request.Context(), req.Email)
-				if err != nil || !auth.CheckPasswordHash(req.Password, user.PasswordHash) {
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "E-mail ou senha incorretos"})
-					return
-				}
-
-				accessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
-				rawRefresh, hashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
-				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-					UserID:    user.ID,
-					TokenHash: hashRefresh,
-					ExpiresAt: expiresAt,
-				})
-
-				c.JSON(http.StatusOK, gin.H{
-					"access_token":  accessToken,
-					"refresh_token": rawRefresh,
-					"user": gin.H{
-						"id":            user.ID,
-						"name":          user.Name,
-						"email":         user.Email,
-						"phone":         user.Phone,
-						"cpf_cnpj":      user.CpfCnpj,
-						"role":          user.Role,
-						"listing_quota": user.ListingQuota,
-						"listings_used": user.ListingsUsed,
-					},
-				})
-			})
+			authGroup.POST("/register", authHandler.Register)
+			authGroup.POST("/login", authHandler.Login)
 		}
 
-		// ==========================================
-		// USUÁRIO, PERFIL E DADOS PESSOAIS
-		// ==========================================
-		api.GET("/me", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Usuário não encontrado"})
-				return
-			}
+		// Usuário & Perfil
+		authMiddleware := auth.AuthMiddleware(tokenService)
+		api.GET("/me", authMiddleware, usersHandler.GetMe)
+		api.PUT("/me/profile", authMiddleware, usersHandler.UpdateProfile)
+		api.POST("/me/password", authMiddleware, usersHandler.UpdatePassword)
 
-			c.JSON(http.StatusOK, gin.H{
-				"user": gin.H{
-					"id":       user.ID,
-					"name":     user.Name,
-					"email":    user.Email,
-					"phone":    user.Phone,
-					"cpf_cnpj": user.CpfCnpj,
-					"role":     user.Role,
-				},
-				"quota": gin.H{
-					"used":  user.ListingsUsed,
-					"limit": user.ListingQuota,
-				},
-			})
-		})
+		// Leads & Propostas
+		api.GET("/me/leads", authMiddleware, leadsHandler.ListMyLeads)
+		api.POST("/properties/:id/leads", leadsHandler.CreateLead)
 
-		// Atualizar Dados Pessoais / Perfil
-		api.PUT("/me/profile", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-
-			var req struct {
-				Name    string  `json:"name" binding:"required"`
-				Phone   *string `json:"phone"`
-				CpfCnpj *string `json:"cpf_cnpj"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			updated, err := database.Queries.UpdateUserProfile(c.Request.Context(), db.UpdateUserProfileParams{
-				ID:      userID,
-				Name:    req.Name,
-				Phone:   req.Phone,
-				CpfCnpj: req.CpfCnpj,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar perfil"})
-				return
-			}
-
-			c.JSON(http.StatusOK, updated)
-		})
-
-		// Alterar Senha
-		api.POST("/me/password", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-
-			var req struct {
-				CurrentPassword string `json:"current_password" binding:"required"`
-				NewPassword     string `json:"new_password" binding:"required,min=6"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
-			if err != nil || !auth.CheckPasswordHash(req.CurrentPassword, user.PasswordHash) {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Senha atual incorreta"})
-				return
-			}
-
-			newHash, err := auth.HashPassword(req.NewPassword)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar nova senha"})
-				return
-			}
-
-			err = database.Queries.UpdateUserPassword(c.Request.Context(), db.UpdateUserPasswordParams{
-				ID:           userID,
-				PasswordHash: newHash,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar senha no banco"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{"message": "Senha alterada com sucesso!"})
-		})
-
-		// ==========================================
-		// LEADS E PROPOSTAS DE ALUGUEL / COMPRA
-		// ==========================================
-		api.GET("/me/leads", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			leads, err := database.Queries.ListLeadsForOwner(c.Request.Context(), userID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar propostas"})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"data": leads})
-		})
-
-		api.POST("/properties/:id/leads", func(c *gin.Context) {
-			propertyID, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
-				return
-			}
-
-			var req properties.CreateLeadDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			createdLead, err := database.Queries.CreateLead(c.Request.Context(), db.CreateLeadParams{
-				PropertyID: propertyID,
-				Name:       req.Name,
-				Email:      req.Email,
-				Phone:      req.Phone,
-				Message:    req.Message,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao enviar proposta"})
-				return
-			}
-
-			c.JSON(http.StatusCreated, createdLead)
-		})
-
-		// ==========================================
-		// IMÓVEIS (BUSCA GEO-ESPACIAL POR RAIO OU TEXTO)
-		// ==========================================
-		api.GET("/properties", func(c *gin.Context) {
-			q := c.Query("q")
-			if q == "" {
-				q = c.Query("city")
-			}
-			propType := c.Query("type")
-			purpose := c.Query("purpose")
-			maxPrice, _ := strconv.ParseFloat(c.Query("max_price"), 64)
-			lat, _ := strconv.ParseFloat(c.Query("lat"), 64)
-			lng, _ := strconv.ParseFloat(c.Query("lng"), 64)
-			radius, _ := strconv.ParseFloat(c.Query("radius_km"), 64)
-
-			limit := int32(20)
-			offset := int32(0)
-			if p, _ := strconv.Atoi(c.Query("page")); p > 1 {
-				offset = int32((p - 1) * 20)
-			}
-
-			items, err := database.Queries.SearchPropertiesGeo(c.Request.Context(), db.SearchPropertiesGeoParams{
-				Query:    q,
-				Type:     propType,
-				Purpose:  purpose,
-				MaxPrice: maxPrice,
-				Limit:    limit,
-				Offset:   offset,
-				Lat:      lat,
-				Lng:      lng,
-				RadiusKm: radius,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao consultar imóveis"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"data":      items,
-				"page":      offset/limit + 1,
-				"page_size": limit,
-				"total":     len(items),
-			})
-		})
-
-		api.GET("/properties/:id", func(c *gin.Context) {
-			id, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
-				return
-			}
-
-			prop, err := database.Queries.GetPropertyByID(c.Request.Context(), id)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Imóvel não encontrado"})
-				return
-			}
-
-			c.JSON(http.StatusOK, prop)
-		})
-
-		api.POST("/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "Usuário não encontrado"})
-				return
-			}
-
-			if user.ListingsUsed >= user.ListingQuota {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error":   "quota_exceeded",
-					"message": "Você atingiu o limite de anúncios ativos do seu plano. Faça upgrade para continuar.",
-				})
-				return
-			}
-
-			var req properties.CreatePropertyDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			prop, err := database.Queries.CreateProperty(c.Request.Context(), db.CreatePropertyParams{
-				UserID:        userID,
-				Title:         req.Title,
-				Description:   req.Description,
-				Type:          req.Type,
-				Purpose:       req.Purpose,
-				Status:        "ACTIVE",
-				Price:         req.Price,
-				CondoFee:      req.CondoFee,
-				Iptu:          req.IPTU,
-				AreaM2:        req.AreaM2,
-				Bedrooms:      req.Bedrooms,
-				Bathrooms:     req.Bathrooms,
-				ParkingSpots:  req.ParkingSpots,
-				ZipCode:       req.ZipCode,
-				Street:        req.Street,
-				Number:        req.Number,
-				Complement:    req.Complement,
-				Neighborhood:  req.Neighborhood,
-				City:          req.City,
-				State:         req.State,
-				Latitude:      req.Latitude,
-				Longitude:     req.Longitude,
-				CoverImageUrl: req.CoverImageURL,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao salvar imóvel no banco"})
-				return
-			}
-
-			c.JSON(http.StatusCreated, prop)
-		})
-
-		api.GET("/me/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			props, err := database.Queries.ListPropertiesByUser(c.Request.Context(), userID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao listar anúncios"})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"data": props})
-		})
-
-		api.PATCH("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			propID, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
-				return
-			}
-
-			var req properties.CreatePropertyDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			updated, err := database.Queries.UpdateProperty(c.Request.Context(), db.UpdatePropertyParams{
-				ID:            propID,
-				UserID:        userID,
-				Title:         req.Title,
-				Description:   req.Description,
-				Type:          req.Type,
-				Purpose:       req.Purpose,
-				Price:         req.Price,
-				CondoFee:      req.CondoFee,
-				Iptu:          req.IPTU,
-				AreaM2:        req.AreaM2,
-				Bedrooms:      req.Bedrooms,
-				Bathrooms:     req.Bathrooms,
-				ParkingSpots:  req.ParkingSpots,
-				City:          req.City,
-				State:         req.State,
-				CoverImageUrl: req.CoverImageURL,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar anúncio"})
-				return
-			}
-
-			c.JSON(http.StatusOK, updated)
-		})
-
-		api.DELETE("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			userID, _ := auth.GetContextUserID(c)
-			propID, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
-				return
-			}
-
-			err = database.Queries.DeleteProperty(c.Request.Context(), db.DeletePropertyParams{
-				ID:     propID,
-				UserID: userID,
-			})
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao excluir anúncio"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{"message": "Anúncio excluído com sucesso"})
-		})
+		// Imóveis
+		api.GET("/properties", propertiesHandler.ListProperties)
+		api.GET("/properties/:id", propertiesHandler.GetProperty)
+		api.POST("/properties", authMiddleware, propertiesHandler.CreateProperty)
+		api.GET("/me/properties", authMiddleware, propertiesHandler.ListMyProperties)
+		api.PATCH("/properties/:id", authMiddleware, propertiesHandler.UpdateProperty)
+		api.DELETE("/properties/:id", authMiddleware, propertiesHandler.DeleteProperty)
 	}
 
 	srv := &http.Server{
