@@ -6,7 +6,7 @@ SELECT id, user_id, title, description, type, purpose, status,
        views_count, created_at, updated_at
 FROM properties
 WHERE status = 'ACTIVE'
-  AND ($1::text = '' OR city ILIKE '%' || $1 || '%' OR neighborhood ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%')
+  AND ($1::text = '' OR (city ILIKE '%' || $1 || '%' OR neighborhood ILIKE '%' || $1 || '%' OR title ILIKE '%' || $1 || '%'))
   AND ($2::text = '' OR type = $2)
   AND ($3::text = '' OR purpose = $3)
   AND ($4::numeric = 0 OR price <= $4)

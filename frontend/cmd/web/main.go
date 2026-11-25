@@ -300,7 +300,15 @@ func main() {
             document.querySelectorAll('.search-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('search-purpose').value = purpose;
-            htmx.trigger('#search-q', 'keyup');
+            
+            const q = document.getElementById('search-q').value;
+            const type = document.getElementById('search-type').value;
+            const maxPrice = document.getElementById('search-price').value;
+
+            htmx.ajax('GET', '/partials/imoveis?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type) + '&purpose=' + encodeURIComponent(purpose) + '&max_price=' + encodeURIComponent(maxPrice), {
+                target: '#lista-imoveis',
+                swap: 'innerHTML'
+            });
         }
     </script>
 </body>
