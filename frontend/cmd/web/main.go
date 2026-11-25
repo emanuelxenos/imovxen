@@ -501,11 +501,152 @@ func main() {
 		c.Status(http.StatusOK)
 	})
 
-	// Handlers de Auth (preservados)
+	// ==========================================
+	// PÁGINA: CADASTRO (/cadastro)
+	// ==========================================
 	r.GET("/cadastro", func(c *gin.Context) {
-		c.Redirect(http.StatusSeeOther, "/login")
+		html := `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Criar Conta — Imovxen</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-content">
+            <a href="/" class="logo-wrapper">
+                <div class="logo-icon">IX</div>
+                <div class="logo-text">Imov<span>xen</span></div>
+            </a>
+            <a href="/login" class="btn btn-outline">Já tenho conta</a>
+        </div>
+    </header>
+
+    <div class="form-container">
+        <h2 style="font-weight: 800; font-size: 1.75rem;">Crie sua conta grátis</h2>
+        <p style="color: var(--text-muted); margin: 0.35rem 0 1.75rem;">Publique seus anúncios de forma 100% digital e sem burocracia.</p>
+        
+        <div id="cadastro-feedback"></div>
+
+        <form hx-post="/auth/register" hx-target="#cadastro-feedback">
+            <div class="form-group">
+                <label>Nome Completo</label>
+                <input class="form-control" type="text" name="name" required placeholder="Ex: Lucas Silva">
+            </div>
+            <div class="form-group">
+                <label>E-mail</label>
+                <input class="form-control" type="email" name="email" required placeholder="seu@email.com">
+            </div>
+            <div class="form-group">
+                <label>Telefone / WhatsApp</label>
+                <input class="form-control" type="text" name="phone" placeholder="(11) 99999-9999">
+            </div>
+            <div class="form-group">
+                <label>Senha</label>
+                <input class="form-control" type="password" name="password" required minlength="6" placeholder="Mínimo 6 caracteres">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem; padding: 0.85rem;">Criar Minha Conta</button>
+        </form>
+    </div>
+</body>
+</html>`
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	})
+
+	// ==========================================
+	// PÁGINA: LOGIN (/login)
+	// ==========================================
 	r.GET("/login", func(c *gin.Context) {
+		html := `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Entrar — Imovxen</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-content">
+            <a href="/" class="logo-wrapper">
+                <div class="logo-icon">IX</div>
+                <div class="logo-text">Imov<span>xen</span></div>
+            </a>
+            <a href="/cadastro" class="btn btn-outline">Criar conta</a>
+        </div>
+    </header>
+
+    <div class="form-container">
+        <h2 style="font-weight: 800; font-size: 1.75rem;">Acesse sua conta</h2>
+        <p style="color: var(--text-muted); margin: 0.35rem 0 1.75rem;">Gerencie seus anúncios e responda a clientes interessados.</p>
+        
+        <div id="login-feedback"></div>
+
+        <form hx-post="/auth/login" hx-target="#login-feedback">
+            <div class="form-group">
+                <label>E-mail</label>
+                <input class="form-control" type="email" name="email" required placeholder="seu@email.com">
+            </div>
+            <div class="form-group">
+                <label>Senha</label>
+                <input class="form-control" type="password" name="password" required placeholder="Sua senha">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem; padding: 0.85rem;">Entrar na Plataforma</button>
+        </form>
+    </div>
+</body>
+</html>`
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+	})
+
+	// Handlers de Auth (POST)
+	r.POST("/auth/register", func(c *gin.Context) {
+		payload := map[string]interface{}{
+			"name":     c.PostForm("name"),
+			"email":    c.PostForm("email"),
+			"password": c.PostForm("password"),
+			"phone":    c.PostForm("phone"),
+		}
+		var apiRes struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := apiClient.Post("/api/auth/register", payload, "", &apiRes); err != nil || apiRes.AccessToken == "" {
+			c.Header("HX-Retarget", "#cadastro-feedback")
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Erro ao criar conta. E-mail já em uso ou dados inválidos.</div>`))
+			return
+		}
+		c.SetCookie("access_token", apiRes.AccessToken, 900, "/", "", false, true)
+		c.SetCookie("refresh_token", apiRes.RefreshToken, 604800, "/", "", false, true)
+		c.Header("HX-Redirect", "/painel/imoveis")
+		c.Status(http.StatusOK)
+	})
+
+	r.POST("/auth/login", func(c *gin.Context) {
+		payload := map[string]interface{}{
+			"email":    c.PostForm("email"),
+			"password": c.PostForm("password"),
+		}
+		var apiRes struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := apiClient.Post("/api/auth/login", payload, "", &apiRes); err != nil || apiRes.AccessToken == "" {
+			c.Header("HX-Retarget", "#login-feedback")
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">E-mail ou senha incorretos.</div>`))
+			return
+		}
+		c.SetCookie("access_token", apiRes.AccessToken, 900, "/", "", false, true)
+		c.SetCookie("refresh_token", apiRes.RefreshToken, 604800, "/", "", false, true)
+		c.Header("HX-Redirect", "/painel/imoveis")
+		c.Status(http.StatusOK)
+	})
+
+	r.GET("/logout", func(c *gin.Context) {
+		c.SetCookie("access_token", "", -1, "/", "", false, true)
+		c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 		c.Redirect(http.StatusSeeOther, "/")
 	})
 
