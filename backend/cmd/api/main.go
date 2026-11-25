@@ -228,15 +228,40 @@ func main() {
 		// ==========================================
 		// IMÓVEIS (TASK-004)
 		// ==========================================
-		// Busca pública com filtros
+		// Busca pública com filtros no PostgreSQL REAL
 		api.GET("/properties", func(c *gin.Context) {
-			city := c.Query("city")
-			_ = city
+			q := c.Query("q")
+			if q == "" {
+				q = c.Query("city")
+			}
+			propType := c.Query("type")
+			purpose := c.Query("purpose")
+			maxPrice, _ := strconv.ParseFloat(c.Query("max_price"), 64)
+
+			limit := int32(20)
+			offset := int32(0)
+			if p, _ := strconv.Atoi(c.Query("page")); p > 1 {
+				offset = int32((p - 1) * 20)
+			}
+
+			items, err := database.Queries.SearchProperties(c.Request.Context(), db.SearchPropertiesParams{
+				Query:    q,
+				Type:     propType,
+				Purpose:  purpose,
+				MaxPrice: maxPrice,
+				Limit:    limit,
+				Offset:   offset,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao consultar imóveis"})
+				return
+			}
+
 			c.JSON(http.StatusOK, gin.H{
-				"data":      []gin.H{},
-				"page":      1,
-				"page_size": 20,
-				"total":     0,
+				"data":      items,
+				"page":      offset/limit + 1,
+				"page_size": limit,
+				"total":     len(items),
 			})
 		})
 
