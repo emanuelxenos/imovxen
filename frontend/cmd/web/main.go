@@ -337,7 +337,7 @@ func main() {
 	})
 
 	// ==========================================
-	// PÁGINA: DETALHE DO IMÓVEL COM PROPOSTA DE ALUGUEL / VENDA
+	// PÁGINA: DETALHE DO IMÓVEL COM CARROSSEL REAL
 	// ==========================================
 	r.GET("/imoveis/:id", func(c *gin.Context) {
 		id := c.Param("id")
@@ -506,9 +506,8 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(msg))
 	})
 
-	// ==========================================
-	// PAINEL COMPLETO DO USUÁRIO (/painel)
-	// Com: Meus Anúncios, Propostas Recebidas, Dados Pessoais e Alterar Senha
+	// ==========================================================
+	// PAINEL PROFISSIONAL COM SIDEBAR LATERAL NATIVA (/painel)
 	// ==========================================
 	r.GET("/painel", func(c *gin.Context) {
 		c.Redirect(http.StatusSeeOther, "/painel/imoveis")
@@ -545,21 +544,25 @@ func main() {
 		}
 		_ = apiClient.Get("/api/me/leads", token, &leadsRes)
 
-		// Renderiza aba de Imóveis
-		imoveisTabActive := ""
-		propostasTabActive := ""
-		perfilTabActive := ""
+		// Classes ativas para a Sidebar
+		imoveisClass := ""
+		propostasClass := ""
+		perfilClass := ""
 
-		contentHTML := ""
+		mainContent := ""
+		pageTitle := ""
 
 		if tab == "imoveis" {
-			imoveisTabActive = "active"
+			imoveisClass = "active"
+			pageTitle = "Gestão de Anúncios"
+
 			cardsHTML := ""
 			if len(propsRes.Data) == 0 {
 				cardsHTML = `
                 <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
                     <p style="font-size: 1.1rem; font-weight: 600;">Você ainda não possui anúncios ativos.</p>
-                    <button onclick="abrirModalCriacao()" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Primeiro Imóvel</button>
+                    <p style="margin-top: 0.25rem;">Comece agora mesmo a divulgar seus imóveis para milhares de compradores.</p>
+                    <button onclick="abrirModalCriacao()" class="btn btn-primary" style="margin-top: 1.5rem;">+ Publicar Primeiro Imóvel</button>
                 </div>`
 			} else {
 				for _, p := range propsRes.Data {
@@ -567,12 +570,12 @@ func main() {
 				}
 			}
 
-			contentHTML = fmt.Sprintf(`
+			mainContent = fmt.Sprintf(`
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                 <div>
-                    <h2 style="font-size: 1.85rem; font-weight: 800;">Meus Anúncios</h2>
+                    <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Meus Imóveis</h1>
                     <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                        Cota do seu plano: <strong>%d de %d anúncios gratuitos ativos</strong>
+                        Você está utilizando <strong>%d de %d anúncios gratuitos</strong> do seu plano Freemium.
                     </p>
                 </div>
                 <button onclick="abrirModalCriacao()" class="btn btn-primary">+ Novo Anúncio</button>
@@ -580,11 +583,14 @@ func main() {
             <div class="property-grid">%s</div>`, meRes.Quota.Used, meRes.Quota.Limit, cardsHTML)
 
 		} else if tab == "propostas" {
-			propostasTabActive = "active"
+			propostasClass = "active"
+			pageTitle = "Propostas Recebidas"
+
 			leadsHTML := ""
 			if len(leadsRes.Data) == 0 {
-				leadsHTML = `<div style="background: #fff; padding: 3rem; text-align: center; border-radius: 1rem; border: 1px dashed var(--border); color: var(--text-muted);">
-                    Nenhuma proposta recebida até o momento. Quando alguém se interessar pelo seu imóvel, aparecerá aqui.
+				leadsHTML = `<div style="background: #fff; padding: 4rem; text-align: center; border-radius: 1rem; border: 1px dashed var(--border); color: var(--text-muted);">
+                    <p style="font-size: 1.1rem; font-weight: 600;">Nenhuma proposta recebida até o momento.</p>
+                    <p style="font-size: 0.9rem; margin-top: 0.25rem;">Assim que um interessado enviar uma oferta ou mensagem, ela aparecerá aqui.</p>
                 </div>`
 			} else {
 				leadsHTML = `<div style="display: flex; flex-direction: column; gap: 1rem;">`
@@ -608,28 +614,30 @@ func main() {
                             <span style="font-weight: 700; font-size: 1.1rem; color: var(--text-main);">%s</span>
                             <span class="badge-purpose" style="position: static;">Imóvel: %s</span>
                         </div>
-                        <p style="margin-bottom: 0.5rem; color: #334155;"><strong>Mensagem:</strong> %s</p>
-                        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-muted); border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                        <p style="margin-bottom: 0.75rem; color: #334155; line-height: 1.6;"><strong>Mensagem:</strong> %s</p>
+                        <div style="display: flex; align-items: center; gap: 1.5rem; font-size: 0.875rem; color: var(--text-muted); border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
                             <div>📧 %s</div>
                             <div>📱 %s</div>
-                            <a href="https://wa.me/55%s" target="_blank" class="btn btn-primary" style="margin-left: auto; padding: 0.25rem 0.75rem; font-size: 0.8rem;">Chamar no WhatsApp</a>
+                            <a href="https://wa.me/55%s" target="_blank" class="btn btn-primary" style="margin-left: auto; padding: 0.35rem 0.85rem; font-size: 0.85rem;">Chamar no WhatsApp</a>
                         </div>
                     </div>`, l.Name, l.PropertyTitle, msgVal, emailVal, phoneVal, strings.ReplaceAll(phoneVal, " ", ""))
 				}
 				leadsHTML += `</div>`
 			}
 
-			contentHTML = fmt.Sprintf(`
+			mainContent = fmt.Sprintf(`
             <div style="margin-bottom: 2rem;">
-                <h2 style="font-size: 1.85rem; font-weight: 800;">Propostas & Mensagens Recebidas</h2>
+                <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Propostas & Contatos</h1>
                 <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                    Responda aos interessados e feche contratos diretamente.
+                    Responda aos clientes interessados em alugar ou comprar seus imóveis.
                 </p>
             </div>
             %s`, leadsHTML)
 
 		} else if tab == "perfil" {
-			perfilTabActive = "active"
+			perfilClass = "active"
+			pageTitle = "Meu Perfil"
+
 			phoneVal := ""
 			if meRes.User.Phone != nil {
 				phoneVal = *meRes.User.Phone
@@ -639,16 +647,15 @@ func main() {
 				cpfVal = *meRes.User.CpfCnpj
 			}
 
-			contentHTML = fmt.Sprintf(`
+			mainContent = fmt.Sprintf(`
             <div style="margin-bottom: 2rem;">
-                <h2 style="font-size: 1.85rem; font-weight: 800;">Meu Perfil & Segurança</h2>
+                <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Meu Perfil & Segurança</h1>
                 <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                    Atualize seus dados pessoais e gerencie sua senha de acesso.
+                    Gerencie seus dados pessoais e credenciais de acesso.
                 </p>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
-                <!-- DADOS PESSOAIS -->
                 <div style="background: #ffffff; padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
                     <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1.25rem;">Dados Cadastrais</h3>
                     <div id="profile-feedback"></div>
@@ -658,8 +665,8 @@ func main() {
                             <input class="form-control" type="text" name="name" required value="%s">
                         </div>
                         <div class="form-group">
-                            <label>E-mail (fixo da conta)</label>
-                            <input class="form-control" type="text" disabled value="%s" style="background: #e2e8f0;">
+                            <label>E-mail (Login)</label>
+                            <input class="form-control" type="text" disabled value="%s" style="background: #e2e8f0; cursor: not-allowed;">
                         </div>
                         <div class="form-group">
                             <label>Telefone / WhatsApp</label>
@@ -669,11 +676,10 @@ func main() {
                             <label>CPF ou CNPJ</label>
                             <input class="form-control" type="text" name="cpf_cnpj" value="%s" placeholder="000.000.000-00">
                         </div>
-                        <button type="submit" class="btn btn-primary" style="width: 100%%; margin-top: 1rem;">Salvar Dados</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%%; margin-top: 1rem;">Salvar Alterações</button>
                     </form>
                 </div>
 
-                <!-- ALTERAR SENHA -->
                 <div style="background: #ffffff; padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
                     <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1.25rem;">Alterar Senha</h3>
                     <div id="password-feedback"></div>
@@ -692,107 +698,148 @@ func main() {
             </div>`, meRes.User.Name, meRes.User.Email, phoneVal, cpfVal)
 		}
 
+		userInitial := "U"
+		if len(meRes.User.Name) > 0 {
+			userInitial = strings.ToUpper(string(meRes.User.Name[0]))
+		}
+
 		html := `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel do Usuário — Imovxen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>` + pageTitle + ` — Painel Imovxen</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@2.0.3"></script>
 </head>
 <body>
-    <header class="navbar">
-        <div class="container nav-content">
-            <a href="/" class="logo-wrapper">
-                <div class="logo-icon">IX</div>
-                <div class="logo-text">Imov<span>xen</span></div>
-            </a>
-            <div class="nav-links">
-                <span style="color: var(--text-muted); font-size: 0.9rem;">Olá, <strong>` + meRes.User.Name + `</strong></span>
-                <a href="/logout" class="btn btn-outline">Sair</a>
+    <div class="dashboard-layout">
+        <!-- SIDEBAR LATERAL MODERNA -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="logo-wrapper">
+                    <div class="logo-icon">IX</div>
+                    <div class="logo-text">Imov<span>xen</span></div>
+                </a>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/painel/imoveis" class="sidebar-link ` + imoveisClass + `">
+                    <span class="icon">🏠</span>
+                    <span>Meus Imóveis</span>
+                </a>
+                <a href="/painel/propostas" class="sidebar-link ` + propostasClass + `">
+                    <span class="icon">📬</span>
+                    <span>Propostas</span>
+                </a>
+                <a href="/painel/perfil" class="sidebar-link ` + perfilClass + `">
+                    <span class="icon">👤</span>
+                    <span>Meu Perfil</span>
+                </a>
+                <div style="height: 1px; background: var(--border); margin: 1rem 0;"></div>
+                <a href="/" class="sidebar-link">
+                    <span class="icon">🌐</span>
+                    <span>Ver Vitrine Pública</span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-avatar">` + userInitial + `</div>
+                    <div style="overflow: hidden; flex: 1;">
+                        <div style="font-weight: 700; font-size: 0.9rem; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">` + meRes.User.Name + `</div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">` + meRes.User.Email + `</div>
+                    </div>
+                    <a href="/logout" title="Sair" style="color: #dc2626; text-decoration: none; font-size: 1.1rem; padding: 0.25rem;">🚪</a>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ÁREA PRINCIPAL DO DASHBOARD -->
+        <div class="dashboard-main">
+            <header class="dashboard-header">
+                <div style="font-weight: 600; color: var(--text-muted); font-size: 0.9rem;">
+                    Painel do Anunciante &bull; ` + pageTitle + `
+                </div>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <a href="/" class="btn btn-outline" style="font-size: 0.85rem; padding: 0.4rem 0.85rem;">Explorar Marketplace</a>
+                    <button onclick="abrirModalCriacao()" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.4rem 0.85rem;">+ Publicar Anúncio</button>
+                </div>
+            </header>
+
+            <div class="dashboard-body">
+                ` + mainContent + `
             </div>
         </div>
-    </header>
+    </div>
 
-    <main class="container" style="margin-top: 2.5rem; margin-bottom: 5rem;">
-        <!-- NAVEGAÇÃO DE ABAS DO PAINEL -->
-        <div class="search-tabs" style="margin-bottom: 2.5rem;">
-            <a href="/painel/imoveis" class="search-tab-btn ` + imoveisTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">🏠 Meus Imóveis</a>
-            <a href="/painel/propostas" class="search-tab-btn ` + propostasTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">📬 Propostas Recebidas</a>
-            <a href="/painel/perfil" class="search-tab-btn ` + perfilTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">👤 Perfil & Senha</a>
-        </div>
+    <!-- MODAL DE CRIAÇÃO / EDIÇÃO COM UPLOAD REAL -->
+    <div id="modal-imovel" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
+        <div class="form-container" style="margin: auto; max-width: 650px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 id="modal-title" style="font-size: 1.35rem; font-weight: 700;">Publicar Novo Imóvel</h3>
+                <button onclick="fecharModal()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
 
-        ` + contentHTML + `
+            <div id="modal-feedback"></div>
 
-        <!-- MODAL DE CRIAÇÃO / EDIÇÃO COM UPLOAD REAL DE ARQUIVOS -->
-        <div id="modal-imovel" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 50; overflow-y: auto; padding: 2.5rem 0;">
-            <div class="form-container" style="margin: auto; max-width: 650px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3 id="modal-title" style="font-size: 1.35rem; font-weight: 700;">Publicar Novo Imóvel</h3>
-                    <button onclick="fecharModal()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            <form id="form-imovel" onsubmit="enviarImovelComUpload(event)">
+                <input type="hidden" id="form-id" name="id" value="">
+                <input type="hidden" id="form-photos" name="photos" value="">
+                
+                <div class="form-group">
+                    <label>Título do Anúncio</label>
+                    <input id="form-title" class="form-control" type="text" name="title" required placeholder="Ex: Apartamento reformado em Pinheiros">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Tipo de Imóvel</label>
+                        <select id="form-type" class="form-control" name="type" required>
+                            <option value="APARTMENT">Apartamento</option>
+                            <option value="HOUSE">Casa</option>
+                            <option value="COMMERCIAL">Comercial</option>
+                            <option value="LAND">Terreno</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Finalidade</label>
+                        <select id="form-purpose" class="form-control" name="purpose" required>
+                            <option value="RENT">Aluguel</option>
+                            <option value="SALE">Venda</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Preço (R$)</label>
+                        <input id="form-price" class="form-control" type="number" step="0.01" name="price" required placeholder="3500.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Área (m²)</label>
+                        <input id="form-area" class="form-control" type="number" step="0.1" name="area_m2" placeholder="65.0">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Cidade</label>
+                        <input id="form-city" class="form-control" type="text" name="city" required placeholder="São Paulo">
+                    </div>
+                    <div class="form-group">
+                        <label>Estado (UF)</label>
+                        <input id="form-state" class="form-control" type="text" name="state" required maxlength="2" placeholder="SP">
+                    </div>
                 </div>
 
-                <div id="modal-feedback"></div>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Fotos do Imóvel (Envie fotos reais do seu computador)</label>
+                    <input id="form-files" class="form-control" type="file" multiple accept="image/*" style="padding: 0.5rem; background: #fff;">
+                    <small style="color: var(--text-muted); font-size: 0.8rem;">Selecione uma ou mais fotos para o carrossel do anúncio.</small>
+                </div>
 
-                <form id="form-imovel" onsubmit="enviarImovelComUpload(event)">
-                    <input type="hidden" id="form-id" name="id" value="">
-                    <input type="hidden" id="form-photos" name="photos" value="">
-                    
-                    <div class="form-group">
-                        <label>Título do Anúncio</label>
-                        <input id="form-title" class="form-control" type="text" name="title" required placeholder="Ex: Apartamento reformado em Pinheiros">
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Tipo de Imóvel</label>
-                            <select id="form-type" class="form-control" name="type" required>
-                                <option value="APARTMENT">Apartamento</option>
-                                <option value="HOUSE">Casa</option>
-                                <option value="COMMERCIAL">Comercial</option>
-                                <option value="LAND">Terreno</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Finalidade</label>
-                            <select id="form-purpose" class="form-control" name="purpose" required>
-                                <option value="RENT">Aluguel</option>
-                                <option value="SALE">Venda</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Preço (R$)</label>
-                            <input id="form-price" class="form-control" type="number" step="0.01" name="price" required placeholder="3500.00">
-                        </div>
-                        <div class="form-group">
-                            <label>Área (m²)</label>
-                            <input id="form-area" class="form-control" type="number" step="0.1" name="area_m2" placeholder="65.0">
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Cidade</label>
-                            <input id="form-city" class="form-control" type="text" name="city" required placeholder="São Paulo">
-                        </div>
-                        <div class="form-group">
-                            <label>Estado (UF)</label>
-                            <input id="form-state" class="form-control" type="text" name="state" required maxlength="2" placeholder="SP">
-                        </div>
-                    </div>
-
-                    <!-- UPLOAD REAL DE ARQUIVOS (LOCAL MULTIPART) -->
-                    <div class="form-group" style="margin-top: 1rem;">
-                        <label>Fotos do Imóvel (Selecione imagens reais do seu computador)</label>
-                        <input id="form-files" class="form-control" type="file" multiple accept="image/*" style="padding: 0.5rem; background: #fff;">
-                        <small style="color: var(--text-muted); font-size: 0.8rem;">Você pode selecionar vários arquivos de foto juntos.</small>
-                    </div>
-
-                    <button type="submit" id="btn-submit-modal" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem; padding: 0.85rem;">Salvar Imóvel</button>
-                </form>
-            </div>
+                <button type="submit" id="btn-submit-modal" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem; padding: 0.85rem;">Salvar Imóvel</button>
+            </form>
         </div>
-    </main>
+    </div>
 
     <script>
         function abrirModalCriacao() {
@@ -836,7 +883,6 @@ func main() {
             const filesInput = document.getElementById('form-files');
             let photoUrls = document.getElementById('form-photos').value;
 
-            // Se selecionou arquivos reais, faz o upload multipart para o backend
             if (filesInput.files.length > 0) {
                 const formData = new FormData();
                 for (let i = 0; i < filesInput.files.length; i++) {
@@ -1110,7 +1156,7 @@ func main() {
 		c.Redirect(http.StatusSeeOther, "/")
 	})
 
-	slog.Info("Servidor Frontend com Painel Completo do Usuario", "porta", port)
+	slog.Info("Servidor Frontend com Layout Dashboard e Sidebar Lateral", "porta", port)
 	if err := r.Run(":" + port); err != nil {
 		slog.Error("Falha ao rodar servidor web", "err", err)
 	}

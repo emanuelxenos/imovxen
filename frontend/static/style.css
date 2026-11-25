@@ -10,6 +10,7 @@
   --text-main: #0f172a;
   --text-muted: #64748b;
   --border: #e2e8f0;
+  --sidebar-w: 260px;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -36,7 +37,7 @@ body {
   padding: 0 1.5rem;
 }
 
-/* NAVBAR MODERNA */
+/* NAVBAR MODERNA (PÚBLICA) */
 .navbar {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
@@ -103,7 +104,7 @@ body {
   color: var(--primary);
 }
 
-/* BOTÕES MODERNOS */
+/* BOTÕES */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -141,10 +142,10 @@ body {
   border-color: #cbd5e1;
 }
 
-/* HERO SECTION DE IMPACTO */
+/* HERO E VITRINE */
 .hero-wrapper {
   position: relative;
-  padding: 5rem 0 7rem;
+  padding: 5rem 0 6rem;
   background: radial-gradient(100% 100% at 50% 0%, rgba(37, 99, 235, 0.08) 0%, rgba(248, 250, 252, 0) 100%);
   text-align: center;
 }
@@ -186,7 +187,6 @@ body {
   margin: 0 auto 2.5rem;
 }
 
-/* BARRA DE BUSCA EM TABS (MODERNA) */
 .search-card {
   max-width: 860px;
   margin: 0 auto;
@@ -261,38 +261,7 @@ body {
   background: #fff;
 }
 
-/* CATEGORIAS RÁPIDAS */
-.quick-categories {
-  display: flex;
-  justify-content: center;
-  gap: 1.5rem;
-  margin-top: 3.5rem;
-  flex-wrap: wrap;
-}
-
-.category-pill {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: #ffffff;
-  padding: 0.6rem 1.25rem;
-  border-radius: 9999px;
-  border: 1px solid var(--border);
-  color: var(--text-main);
-  font-weight: 600;
-  font-size: 0.9rem;
-  text-decoration: none;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s;
-}
-
-.category-pill:hover {
-  transform: translateY(-2px);
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-/* CARDS DE IMÓVEIS (PADRÃO PREMIUM) */
+/* CARDS */
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -310,7 +279,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 2rem;
-  margin-bottom: 5rem;
+  margin-bottom: 4rem;
 }
 
 .property-card {
@@ -362,18 +331,6 @@ body {
   border-radius: 9999px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.badge-featured {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.35rem 0.75rem;
-  border-radius: 9999px;
 }
 
 .property-content {
@@ -430,7 +387,122 @@ body {
   font-weight: 600;
 }
 
-/* FORMULÁRIOS MODERNOS */
+/* ==========================================================
+   LAYOUT PROFISSIONAL DE DASHBOARD COM SIDEBAR LATERAL
+   ========================================================== */
+.dashboard-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8fafc;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  background: #ffffff;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+}
+
+.sidebar-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-nav {
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.sidebar-link:hover {
+  background: #f1f5f9;
+  color: var(--text-main);
+}
+
+.sidebar-link.active {
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.sidebar-link .icon {
+  font-size: 1.2rem;
+  width: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.sidebar-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.dashboard-main {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.dashboard-header {
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 2.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.dashboard-body {
+  padding: 2.5rem;
+  flex: 1;
+}
+
+/* FORMULÁRIOS E ALERTAS */
 .form-container {
   max-width: 480px;
   margin: 4rem auto;
@@ -489,28 +561,9 @@ body {
   border: 1px solid #bbf7d0;
 }
 
-/* FOOTER ELEGANTE */
 .footer {
   background: #ffffff;
   border-top: 1px solid var(--border);
   padding: 4rem 0 2rem;
   margin-top: 6rem;
-}
-
-.footer-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 2rem;
-  margin-bottom: 2rem;
-}
-
-@media (max-width: 768px) {
-  .search-grid {
-    grid-template-columns: 1fr;
-  }
-  .hero-title {
-    font-size: 2.2rem;
-  }
 }
