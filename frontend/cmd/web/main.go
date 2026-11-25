@@ -234,10 +234,10 @@ func main() {
                 </div>
                 <div class="search-grid">
                     <div class="field-group">
-                        <label>Localização</label>
+                        <label>Localização <span id="geo-status" style="color: var(--primary); font-size: 0.75rem; text-transform: none; cursor: pointer;" onclick="detectarLocalizacao()">📍 Usar meu local</span></label>
                         <input id="search-q" class="field-input" type="text" name="q" placeholder="Cidade, bairro ou título..."
                                hx-get="/partials/imoveis" 
-                               hx-include="#search-type, #search-purpose, #search-price"
+                               hx-include="#search-type, #search-purpose, #search-price, #search-lat, #search-lng"
                                hx-trigger="keyup changed delay:350ms" 
                                hx-target="#lista-imoveis">
                     </div>
@@ -269,9 +269,11 @@ func main() {
                         </select>
                     </div>
                     <input type="hidden" id="search-purpose" name="purpose" value="">
+                    <input type="hidden" id="search-lat" name="lat" value="">
+                    <input type="hidden" id="search-lng" name="lng" value="">
                     <button class="btn btn-primary" style="height: 46px; align-self: flex-end; padding: 0 1.5rem;"
                             hx-get="/partials/imoveis"
-                            hx-include="#search-q, #search-type, #search-purpose, #search-price"
+                            hx-include="#search-q, #search-type, #search-purpose, #search-price, #search-lat, #search-lng"
                             hx-target="#lista-imoveis">
                         Buscar
                     </button>
@@ -296,6 +298,52 @@ func main() {
     </main>
 
     <script>
+        function detectarLocalizacao() {
+            const status = document.getElementById('geo-status');
+            if (!navigator.geolocation) {
+                status.innerText = 'GPS não suportado';
+                return;
+            }
+            status.innerText = 'Obtendo local...';
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    document.getElementById('search-lat').value = lat;
+                    document.getElementById('search-lng').value = lng;
+                    status.innerText = '📍 Mais próximos de você';
+                    
+                    const q = document.getElementById('search-q').value;
+                    const type = document.getElementById('search-type').value;
+                    const purpose = document.getElementById('search-purpose').value;
+                    const maxPrice = document.getElementById('search-price').value;
+
+                    htmx.ajax('GET', '/partials/imoveis?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type) + '&purpose=' + encodeURIComponent(purpose) + '&max_price=' + encodeURIComponent(maxPrice) + '&lat=' + lat + '&lng=' + lng, {
+                        target: '#lista-imoveis',
+                        swap: 'innerHTML'
+                    });
+                },
+                () => {
+                    status.innerText = 'Permissão negada';
+                }
+            );
+        }
+
+        // Tenta detectar automaticamente ao entrar na página
+        window.addEventListener('DOMContentLoaded', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    document.getElementById('search-lat').value = pos.coords.latitude;
+                    document.getElementById('search-lng').value = pos.coords.longitude;
+                    document.getElementById('geo-status').innerText = '📍 Ordenado por proximidade';
+                    htmx.ajax('GET', '/partials/imoveis?lat=' + pos.coords.latitude + '&lng=' + pos.coords.longitude, {
+                        target: '#lista-imoveis',
+                        swap: 'innerHTML'
+                    });
+                }, () => {});
+            }
+        });
+
         function setPurpose(btn, purpose) {
             document.querySelectorAll('.search-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -304,8 +352,10 @@ func main() {
             const q = document.getElementById('search-q').value;
             const type = document.getElementById('search-type').value;
             const maxPrice = document.getElementById('search-price').value;
+            const lat = document.getElementById('search-lat').value;
+            const lng = document.getElementById('search-lng').value;
 
-            htmx.ajax('GET', '/partials/imoveis?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type) + '&purpose=' + encodeURIComponent(purpose) + '&max_price=' + encodeURIComponent(maxPrice), {
+            htmx.ajax('GET', '/partials/imoveis?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type) + '&purpose=' + encodeURIComponent(purpose) + '&max_price=' + encodeURIComponent(maxPrice) + '&lat=' + lat + '&lng=' + lng, {
                 target: '#lista-imoveis',
                 swap: 'innerHTML'
             });
@@ -321,8 +371,10 @@ func main() {
 		propType := c.Query("type")
 		purpose := c.Query("purpose")
 		maxPrice := c.Query("max_price")
+		lat := c.Query("lat")
+		lng := c.Query("lng")
 
-		endpoint := fmt.Sprintf("/api/properties?q=%s&type=%s&purpose=%s&max_price=%s", q, propType, purpose, maxPrice)
+		endpoint := fmt.Sprintf("/api/properties?q=%s&type=%s&purpose=%s&max_price=%s&lat=%s&lng=%s", q, propType, purpose, maxPrice, lat, lng)
 		var apiRes struct {
 			Data []PropertyItem `json:"data"`
 		}

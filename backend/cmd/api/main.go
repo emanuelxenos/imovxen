@@ -358,7 +358,7 @@ func main() {
 		})
 
 		// ==========================================
-		// IMÓVEIS (CRUD)
+		// IMÓVEIS (BUSCA GEO-ESPACIAL POR RAIO OU TEXTO)
 		// ==========================================
 		api.GET("/properties", func(c *gin.Context) {
 			q := c.Query("q")
@@ -368,6 +368,9 @@ func main() {
 			propType := c.Query("type")
 			purpose := c.Query("purpose")
 			maxPrice, _ := strconv.ParseFloat(c.Query("max_price"), 64)
+			lat, _ := strconv.ParseFloat(c.Query("lat"), 64)
+			lng, _ := strconv.ParseFloat(c.Query("lng"), 64)
+			radius, _ := strconv.ParseFloat(c.Query("radius_km"), 64)
 
 			limit := int32(20)
 			offset := int32(0)
@@ -375,13 +378,16 @@ func main() {
 				offset = int32((p - 1) * 20)
 			}
 
-			items, err := database.Queries.SearchProperties(c.Request.Context(), db.SearchPropertiesParams{
+			items, err := database.Queries.SearchPropertiesGeo(c.Request.Context(), db.SearchPropertiesGeoParams{
 				Query:    q,
 				Type:     propType,
 				Purpose:  purpose,
 				MaxPrice: maxPrice,
 				Limit:    limit,
 				Offset:   offset,
+				Lat:      lat,
+				Lng:      lng,
+				RadiusKm: radius,
 			})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao consultar imóveis"})
