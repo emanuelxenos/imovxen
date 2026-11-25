@@ -1,0 +1,32 @@
+# Binários compilados
+backend/bin/
+backend/tmp/
+frontend/bin/
+frontend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Dependências e caches de compilação
+vendor/
+
+# Arquivos de ambiente e segredos locais
+.env
+*.local.env
+
+# IDEs e editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Banco de dados e storage locais (caso montados na pasta)
+postgres_data/
+minio_data/
+
+# Logs e arquivos de teste
+*.log
+coverage.out
