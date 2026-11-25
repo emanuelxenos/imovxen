@@ -349,6 +349,68 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"data": props})
 		})
 
+		// Editar Imóvel (PATCH)
+		api.PATCH("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			userID, _ := auth.GetContextUserID(c)
+			propID, err := uuid.Parse(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
+				return
+			}
+
+			var req properties.CreatePropertyDTO
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			updated, err := database.Queries.UpdateProperty(c.Request.Context(), db.UpdatePropertyParams{
+				ID:            propID,
+				UserID:        userID,
+				Title:         req.Title,
+				Description:   req.Description,
+				Type:          req.Type,
+				Purpose:       req.Purpose,
+				Price:         req.Price,
+				CondoFee:      req.CondoFee,
+				Iptu:          req.IPTU,
+				AreaM2:        req.AreaM2,
+				Bedrooms:      req.Bedrooms,
+				Bathrooms:     req.Bathrooms,
+				ParkingSpots:  req.ParkingSpots,
+				City:          req.City,
+				State:         req.State,
+				CoverImageUrl: req.CoverImageURL,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar anúncio"})
+				return
+			}
+
+			c.JSON(http.StatusOK, updated)
+		})
+
+		// Excluir Imóvel (DELETE)
+		api.DELETE("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			userID, _ := auth.GetContextUserID(c)
+			propID, err := uuid.Parse(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
+				return
+			}
+
+			err = database.Queries.DeleteProperty(c.Request.Context(), db.DeletePropertyParams{
+				ID:     propID,
+				UserID: userID,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao excluir anúncio"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Anúncio excluído com sucesso"})
+		})
+
 		// ==========================================
 		// LEADS (TASK-004)
 		// ==========================================

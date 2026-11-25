@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/imovxen/frontend/internal/api"
@@ -29,11 +30,34 @@ type PropertyItem struct {
 	CoverImageUrl *string  `json:"cover_image_url"`
 }
 
-func renderPropertyCard(p PropertyItem) string {
-	imgURL := "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80"
-	if p.CoverImageUrl != nil && *p.CoverImageUrl != "" {
-		imgURL = *p.CoverImageUrl
+func parsePhotos(coverURL *string) []string {
+	defaultPhotos := []string{
+		"https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+		"https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80",
+		"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80",
 	}
+
+	if coverURL == nil || *coverURL == "" {
+		return defaultPhotos
+	}
+
+	urls := strings.Split(*coverURL, ",")
+	var cleaned []string
+	for _, u := range urls {
+		trim := strings.TrimSpace(u)
+		if trim != "" {
+			cleaned = append(cleaned, trim)
+		}
+	}
+	if len(cleaned) == 0 {
+		return defaultPhotos
+	}
+	return cleaned
+}
+
+func renderPropertyCard(p PropertyItem, isOwner bool) string {
+	photos := parsePhotos(p.CoverImageUrl)
+	coverImg := photos[0]
 
 	purposeLabel := "Aluguel"
 	priceSuffix := "<span>/mês</span>"
@@ -57,6 +81,25 @@ func renderPropertyCard(p PropertyItem) string {
 		parking = fmt.Sprintf("%d Vagas", *p.ParkingSpots)
 	}
 
+	actionButtons := ""
+	if isOwner {
+		actionButtons = fmt.Sprintf(`
+        <div style="display: flex; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
+            <button onclick="event.stopPropagation(); abrirModalEdicao('%s', '%s', '%s', '%s', %.2f, '%.1f', '%s', '%s', '%s')" class="btn btn-outline" style="flex: 1; padding: 0.4rem 0.5rem; font-size: 0.85rem;">✏️ Editar</button>
+            <button onclick="event.stopPropagation(); if(confirm('Tem certeza que deseja excluir este anúncio?')) htmx.ajax('DELETE', '/painel/imoveis/%s', {target: 'body'})" class="btn btn-outline" style="color: #dc2626; border-color: #fecaca; padding: 0.4rem 0.5rem; font-size: 0.85rem;">🗑️ Excluir</button>
+        </div>`, p.ID, p.Title, p.Type, p.Purpose, p.Price, func() float64 {
+			if p.AreaM2 != nil {
+				return *p.AreaM2
+			}
+			return 0
+		}(), p.City, p.State, func() string {
+			if p.CoverImageUrl != nil {
+				return *p.CoverImageUrl
+			}
+			return ""
+		}(), p.ID)
+	}
+
 	return fmt.Sprintf(`
     <article class="property-card" onclick="window.location.href='/imoveis/%s'" style="cursor: pointer;">
         <div class="card-image-wrapper">
@@ -72,8 +115,9 @@ func renderPropertyCard(p PropertyItem) string {
                 <div class="amenity-item">🛏️ %s</div>
                 <div class="amenity-item">🚗 %s</div>
             </div>
+            %s
         </div>
-    </article>`, p.ID, purposeLabel, imgURL, p.Title, p.Price, priceSuffix, p.Title, p.City, p.State, area, bedrooms, parking)
+    </article>`, p.ID, purposeLabel, coverImg, p.Title, p.Price, priceSuffix, p.Title, p.City, p.State, area, bedrooms, parking, actionButtons)
 }
 
 func main() {
@@ -96,7 +140,7 @@ func main() {
 	r.Static("/static", "./static")
 
 	// ==========================================
-	// PÁGINA: HOME (BUSCA E LISTAGEM DO BANCO REAL)
+	// PÁGINA: HOME
 	// ==========================================
 	r.GET("/", func(c *gin.Context) {
 		token, _ := c.Cookie("access_token")
@@ -122,7 +166,7 @@ func main() {
             </div>`
 		} else {
 			for _, item := range apiRes.Data {
-				cardsHTML += renderPropertyCard(item)
+				cardsHTML += renderPropertyCard(item, false)
 			}
 		}
 
@@ -272,9 +316,6 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	})
 
-	// ==========================================
-	// PARTIAL HTMX (BUSCA REAL NO POSTGRESQL)
-	// ==========================================
 	r.GET("/partials/imoveis", func(c *gin.Context) {
 		q := c.Query("q")
 		propType := c.Query("type")
@@ -299,13 +340,13 @@ func main() {
 
 		cards := ""
 		for _, item := range apiRes.Data {
-			cards += renderPropertyCard(item)
+			cards += renderPropertyCard(item, false)
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(cards))
 	})
 
 	// ==========================================
-	// PÁGINA: DETALHE DO IMÓVEL (/imoveis/:id) REAL
+	// PÁGINA: DETALHE DO IMÓVEL COM CARROSSEL REAL
 	// ==========================================
 	r.GET("/imoveis/:id", func(c *gin.Context) {
 		id := c.Param("id")
@@ -317,10 +358,7 @@ func main() {
 			return
 		}
 
-		imgURL := "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80"
-		if prop.CoverImageUrl != nil && *prop.CoverImageUrl != "" {
-			imgURL = *prop.CoverImageUrl
-		}
+		photos := parsePhotos(prop.CoverImageUrl)
 
 		purposeLabel := "Aluguel"
 		priceSuffix := "<span>/mês</span>"
@@ -337,6 +375,18 @@ func main() {
 		areaVal := "—"
 		if prop.AreaM2 != nil && *prop.AreaM2 > 0 {
 			areaVal = fmt.Sprintf("%.0fm²", *prop.AreaM2)
+		}
+
+		// Gera slides do carrossel
+		slidesHTML := ""
+		thumbsHTML := ""
+		for i, img := range photos {
+			activeClass := "display: none;"
+			if i == 0 {
+				activeClass = "display: block;"
+			}
+			slidesHTML += fmt.Sprintf(`<img id="slide-%d" src="%s" class="carousel-slide" style="%s; width: 100%%; height: 460px; object-fit: cover; border-radius: 1rem;">`, i, img, activeClass)
+			thumbsHTML += fmt.Sprintf(`<img src="%s" onclick="goToSlide(%d)" style="width: 80px; height: 60px; object-fit: cover; border-radius: 0.5rem; cursor: pointer; border: 2px solid var(--border);" class="carousel-thumb" id="thumb-%d">`, img, i, i)
 		}
 
 		html := `<!DOCTYPE html>
@@ -362,8 +412,14 @@ func main() {
     <main class="container" style="margin-top: 2.5rem; margin-bottom: 5rem;">
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2.5rem;">
             <div>
-                <div style="border-radius: 1rem; overflow: hidden; height: 420px; box-shadow: var(--shadow-lg);">
-                    <img src="` + imgURL + `" style="width: 100%; height: 100%; object-fit: cover;">
+                <!-- CARROSSEL DE IMAGENS -->
+                <div style="position: relative; border-radius: 1rem; overflow: hidden; box-shadow: var(--shadow-lg);">
+                    ` + slidesHTML + `
+                    <button onclick="prevSlide()" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 1.5rem; display: flex; align-items: center; justify-content: center;">&#10094;</button>
+                    <button onclick="nextSlide()" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 1.5rem; display: flex; align-items: center; justify-content: center;">&#10095;</button>
+                </div>
+                <div style="display: flex; gap: 0.75rem; margin-top: 1rem; overflow-x: auto; padding-bottom: 0.5rem;">
+                    ` + thumbsHTML + `
                 </div>
 
                 <div style="margin-top: 2rem;">
@@ -414,6 +470,36 @@ func main() {
             </div>
         </div>
     </main>
+
+    <script>
+        let currentSlide = 0;
+        const totalSlides = ` + strconv.Itoa(len(photos)) + `;
+
+        function showSlide(index) {
+            document.querySelectorAll('.carousel-slide').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.carousel-thumb').forEach(t => t.style.borderColor = 'var(--border)');
+            
+            const slide = document.getElementById('slide-' + index);
+            const thumb = document.getElementById('thumb-' + index);
+            if (slide) slide.style.display = 'block';
+            if (thumb) thumb.style.borderColor = 'var(--primary)';
+            currentSlide = index;
+        }
+
+        function nextSlide() {
+            let next = (currentSlide + 1) % totalSlides;
+            showSlide(next);
+        }
+
+        function prevSlide() {
+            let prev = (currentSlide - 1 + totalSlides) % totalSlides;
+            showSlide(prev);
+        }
+
+        function goToSlide(index) {
+            showSlide(index);
+        }
+    </script>
 </body>
 </html>`
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
@@ -429,8 +515,241 @@ func main() {
 	})
 
 	// ==========================================
-	// PÁGINA: CADASTRO (/cadastro)
+	// PÁGINA: PAINEL MEUS IMÓVEIS (COM EDIÇÃO E EXCLUSÃO)
 	// ==========================================
+	r.GET("/painel/imoveis", func(c *gin.Context) {
+		token, err := c.Cookie("access_token")
+		if err != nil || token == "" {
+			c.Redirect(http.StatusSeeOther, "/login")
+			return
+		}
+		var meRes struct {
+			User struct {
+				Name string `json:"name"`
+			} `json:"user"`
+			Quota struct {
+				Used  int `json:"used"`
+				Limit int `json:"limit"`
+			} `json:"quota"`
+		}
+		_ = apiClient.Get("/api/me", token, &meRes)
+
+		var propsRes struct {
+			Data []PropertyItem `json:"data"`
+		}
+		_ = apiClient.Get("/api/me/properties", token, &propsRes)
+
+		cardsHTML := ""
+		if len(propsRes.Data) == 0 {
+			cardsHTML = `
+            <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
+                <p style="font-size: 1.1rem; font-weight: 600;">Você ainda não possui anúncios ativos.</p>
+                <p style="font-size: 0.9rem; margin-top: 0.25rem;">Comece agora mesmo a divulgar seus imóveis para milhares de compradores.</p>
+                <button onclick="document.getElementById('modal-novo-imovel').style.display='block'" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Primeiro Imóvel</button>
+            </div>`
+		} else {
+			for _, p := range propsRes.Data {
+				cardsHTML += renderPropertyCard(p, true)
+			}
+		}
+
+		html := `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel do Anunciante — Imovxen</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container nav-content">
+            <a href="/" class="logo-wrapper">
+                <div class="logo-icon">IX</div>
+                <div class="logo-text">Imov<span>xen</span></div>
+            </a>
+            <div class="nav-links">
+                <span style="color: var(--text-muted); font-size: 0.9rem;">Olá, <strong>` + meRes.User.Name + `</strong></span>
+                <a href="/logout" class="btn btn-outline">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="margin-top: 2.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <div>
+                <h2 style="font-size: 1.85rem; font-weight: 800;">Painel de Gestão</h2>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                    Cota ativa: <strong>` + strconv.Itoa(meRes.Quota.Used) + ` de ` + strconv.Itoa(meRes.Quota.Limit) + ` anúncios gratuitos</strong>
+                </p>
+            </div>
+            <button onclick="abrirModalCriacao()" class="btn btn-primary">+ Anunciar Imóvel</button>
+        </div>
+
+        <div class="property-grid">
+            ` + cardsHTML + `
+        </div>
+
+        <!-- MODAL DE CRIAÇÃO / EDIÇÃO DE ANÚNCIO -->
+        <div id="modal-imovel" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 50; overflow-y: auto; padding: 2.5rem 0;">
+            <div class="form-container" style="margin: auto; max-width: 620px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h3 id="modal-title" style="font-size: 1.35rem; font-weight: 700;">Publicar Novo Imóvel</h3>
+                    <button onclick="fecharModal()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+                </div>
+
+                <div id="modal-feedback"></div>
+
+                <form id="form-imovel" hx-post="/painel/imoveis/salvar" hx-target="#modal-feedback">
+                    <input type="hidden" id="form-id" name="id" value="">
+                    
+                    <div class="form-group">
+                        <label>Título do Anúncio</label>
+                        <input id="form-title" class="form-control" type="text" name="title" required placeholder="Ex: Apartamento no coração de Pinheiros">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label>Tipo de Imóvel</label>
+                            <select id="form-type" class="form-control" name="type" required>
+                                <option value="APARTMENT">Apartamento</option>
+                                <option value="HOUSE">Casa</option>
+                                <option value="COMMERCIAL">Comercial</option>
+                                <option value="LAND">Terreno</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Finalidade</label>
+                            <select id="form-purpose" class="form-control" name="purpose" required>
+                                <option value="RENT">Aluguel</option>
+                                <option value="SALE">Venda</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label>Preço (R$)</label>
+                            <input id="form-price" class="form-control" type="number" step="0.01" name="price" required placeholder="3500.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Área (m²)</label>
+                            <input id="form-area" class="form-control" type="number" step="0.1" name="area_m2" placeholder="65.0">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label>Cidade</label>
+                            <input id="form-city" class="form-control" type="text" name="city" required placeholder="São Paulo">
+                        </div>
+                        <div class="form-group">
+                            <label>Estado (UF)</label>
+                            <input id="form-state" class="form-control" type="text" name="state" required maxlength="2" placeholder="SP">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Fotos do Imóvel (URLs separadas por vírgula para o carrossel)</label>
+                        <textarea id="form-photos" class="form-control" name="photos" rows="2" placeholder="https://exemplo.com/foto1.jpg, https://exemplo.com/foto2.jpg"></textarea>
+                    </div>
+                    <button type="submit" id="btn-submit-modal" class="btn btn-primary" style="width: 100%; margin-top: 1.25rem; padding: 0.85rem;">Salvar Imóvel</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function abrirModalCriacao() {
+            document.getElementById('modal-title').innerText = 'Publicar Novo Imóvel';
+            document.getElementById('btn-submit-modal').innerText = 'Publicar Agora';
+            document.getElementById('form-id').value = '';
+            document.getElementById('form-title').value = '';
+            document.getElementById('form-price').value = '';
+            document.getElementById('form-area').value = '';
+            document.getElementById('form-city').value = '';
+            document.getElementById('form-state').value = '';
+            document.getElementById('form-photos').value = '';
+            document.getElementById('modal-imovel').style.display = 'block';
+        }
+
+        function abrirModalEdicao(id, title, type, purpose, price, area, city, state, photos) {
+            document.getElementById('modal-title').innerText = 'Editar Anúncio';
+            document.getElementById('btn-submit-modal').innerText = 'Atualizar Anúncio';
+            document.getElementById('form-id').value = id;
+            document.getElementById('form-title').value = title;
+            document.getElementById('form-type').value = type;
+            document.getElementById('form-purpose').value = purpose;
+            document.getElementById('form-price').value = price;
+            document.getElementById('form-area').value = area;
+            document.getElementById('form-city').value = city;
+            document.getElementById('form-state').value = state;
+            document.getElementById('form-photos').value = photos;
+            document.getElementById('modal-imovel').style.display = 'block';
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-imovel').style.display = 'none';
+        }
+    </script>
+</body>
+</html>`
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+	})
+
+	// Submissão unificada (Criar ou Atualizar)
+	r.POST("/painel/imoveis/salvar", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		id := c.PostForm("id")
+		price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
+		area, _ := strconv.ParseFloat(c.PostForm("area_m2"), 64)
+		photos := c.PostForm("photos")
+
+		payload := map[string]interface{}{
+			"title":           c.PostForm("title"),
+			"type":            c.PostForm("type"),
+			"purpose":         c.PostForm("purpose"),
+			"price":           price,
+			"area_m2":         area,
+			"city":            c.PostForm("city"),
+			"state":           c.PostForm("state"),
+			"cover_image_url": photos,
+		}
+
+		var apiRes struct {
+			ID    string `json:"id"`
+			Error string `json:"error"`
+		}
+
+		var err error
+		if id == "" {
+			// Novo anúncio (POST)
+			err = apiClient.Post("/api/properties", payload, token, &apiRes)
+		} else {
+			// Edição de anúncio existente (PATCH)
+			err = apiClient.Patch("/api/properties/"+id, payload, token, &apiRes)
+		}
+
+		if err != nil || apiRes.ID == "" {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Erro ao salvar anúncio. Verifique sua cota ou dados informados.</div>`))
+			return
+		}
+
+		c.Header("HX-Refresh", "true")
+		c.Status(http.StatusOK)
+	})
+
+	// Exclusão de imóvel (DELETE)
+	r.DELETE("/painel/imoveis/:id", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		id := c.Param("id")
+
+		var apiRes struct {
+			Message string `json:"message"`
+		}
+		_ = apiClient.Delete("/api/properties/"+id, token, &apiRes)
+
+		c.Header("HX-Refresh", "true")
+		c.Status(http.StatusOK)
+	})
+
+	// Páginas de Auth
 	r.GET("/cadastro", func(c *gin.Context) {
 		html := `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -482,9 +801,6 @@ func main() {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	})
 
-	// ==========================================
-	// PÁGINA: LOGIN (/login)
-	// ==========================================
 	r.GET("/login", func(c *gin.Context) {
 		html := `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -576,181 +892,7 @@ func main() {
 		c.Redirect(http.StatusSeeOther, "/")
 	})
 
-	// ==========================================
-	// PÁGINA: PAINEL MEUS IMÓVEIS (DADOS DO BANCO REAL)
-	// ==========================================
-	r.GET("/painel/imoveis", func(c *gin.Context) {
-		token, err := c.Cookie("access_token")
-		if err != nil || token == "" {
-			c.Redirect(http.StatusSeeOther, "/login")
-			return
-		}
-		var meRes struct {
-			User struct {
-				Name string `json:"name"`
-			} `json:"user"`
-			Quota struct {
-				Used  int `json:"used"`
-				Limit int `json:"limit"`
-			} `json:"quota"`
-		}
-		_ = apiClient.Get("/api/me", token, &meRes)
-
-		var propsRes struct {
-			Data []PropertyItem `json:"data"`
-		}
-		_ = apiClient.Get("/api/me/properties", token, &propsRes)
-
-		cardsHTML := ""
-		if len(propsRes.Data) == 0 {
-			cardsHTML = `
-            <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
-                <p style="font-size: 1.1rem; font-weight: 600;">Você ainda não possui anúncios ativos.</p>
-                <p style="font-size: 0.9rem; margin-top: 0.25rem;">Comece agora mesmo a divulgar seus imóveis para milhares de compradores.</p>
-                <button onclick="document.getElementById('modal-novo-imovel').style.display='block'" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Primeiro Imóvel</button>
-            </div>`
-		} else {
-			for _, p := range propsRes.Data {
-				cardsHTML += renderPropertyCard(p)
-			}
-		}
-
-		html := `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <title>Painel do Anunciante — Imovxen</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
-</head>
-<body>
-    <header class="navbar">
-        <div class="container nav-content">
-            <a href="/" class="logo-wrapper">
-                <div class="logo-icon">IX</div>
-                <div class="logo-text">Imov<span>xen</span></div>
-            </a>
-            <div class="nav-links">
-                <span style="color: var(--text-muted); font-size: 0.9rem;">Olá, <strong>` + meRes.User.Name + `</strong></span>
-                <a href="/logout" class="btn btn-outline">Sair</a>
-            </div>
-        </div>
-    </header>
-
-    <main class="container" style="margin-top: 2.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <div>
-                <h2 style="font-size: 1.85rem; font-weight: 800;">Painel de Gestão</h2>
-                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                    Cota ativa: <strong>` + strconv.Itoa(meRes.Quota.Used) + ` de ` + strconv.Itoa(meRes.Quota.Limit) + ` anúncios gratuitos</strong>
-                </p>
-            </div>
-            <button onclick="document.getElementById('modal-novo-imovel').style.display='block'" class="btn btn-primary">+ Anunciar Imóvel</button>
-        </div>
-
-        <div class="property-grid">
-            ` + cardsHTML + `
-        </div>
-
-        <div id="modal-novo-imovel" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 50; overflow-y: auto; padding: 2.5rem 0;">
-            <div class="form-container" style="margin: auto; max-width: 620px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3 style="font-size: 1.35rem; font-weight: 700;">Publicar Novo Imóvel</h3>
-                    <button onclick="document.getElementById('modal-novo-imovel').style.display='none'" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
-                </div>
-
-                <div id="novo-imovel-feedback"></div>
-
-                <form hx-post="/painel/imoveis/novo" hx-target="#novo-imovel-feedback">
-                    <div class="form-group">
-                        <label>Título do Anúncio</label>
-                        <input class="form-control" type="text" name="title" required placeholder="Ex: Apartamento no coração de Pinheiros">
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Tipo de Imóvel</label>
-                            <select class="form-control" name="type" required>
-                                <option value="APARTMENT">Apartamento</option>
-                                <option value="HOUSE">Casa</option>
-                                <option value="COMMERCIAL">Comercial</option>
-                                <option value="LAND">Terreno</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Finalidade</label>
-                            <select class="form-control" name="purpose" required>
-                                <option value="RENT">Aluguel</option>
-                                <option value="SALE">Venda</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Preço (R$)</label>
-                            <input class="form-control" type="number" step="0.01" name="price" required placeholder="3500.00">
-                        </div>
-                        <div class="form-group">
-                            <label>Área (m²)</label>
-                            <input class="form-control" type="number" step="0.1" name="area_m2" placeholder="65.0">
-                        </div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div class="form-group">
-                            <label>Cidade</label>
-                            <input class="form-control" type="text" name="city" required placeholder="São Paulo">
-                        </div>
-                        <div class="form-group">
-                            <label>Estado (UF)</label>
-                            <input class="form-control" type="text" name="state" required maxlength="2" placeholder="SP">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Descrição do Imóvel</label>
-                        <textarea class="form-control" name="description" rows="3" placeholder="Detalhes do imóvel, condomínio, localização..."></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.25rem; padding: 0.85rem;">Publicar Agora</button>
-                </form>
-            </div>
-        </div>
-    </main>
-</body>
-</html>`
-		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
-	})
-
-	r.POST("/painel/imoveis/novo", func(c *gin.Context) {
-		token, _ := c.Cookie("access_token")
-		price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
-		area, _ := strconv.ParseFloat(c.PostForm("area_m2"), 64)
-
-		desc := c.PostForm("description")
-		payload := map[string]interface{}{
-			"title":       c.PostForm("title"),
-			"type":        c.PostForm("type"),
-			"purpose":     c.PostForm("purpose"),
-			"price":       price,
-			"area_m2":     area,
-			"city":        c.PostForm("city"),
-			"state":       c.PostForm("state"),
-			"description": desc,
-		}
-
-		var apiRes struct {
-			ID    string `json:"id"`
-			Error string `json:"error"`
-		}
-
-		err := apiClient.Post("/api/properties", payload, token, &apiRes)
-		if err != nil || apiRes.ID == "" {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Erro ao criar anúncio. Verifique se o limite de cota gratuita (2 imóveis) foi atingido.</div>`))
-			return
-		}
-
-		c.Header("HX-Refresh", "true")
-		c.Status(http.StatusOK)
-	})
-
-	slog.Info("Servidor Frontend Conectado ao Banco Real", "porta", port)
+	slog.Info("Servidor Frontend com Carrossel e Gestao Completa", "porta", port)
 	if err := r.Run(":" + port); err != nil {
 		slog.Error("Falha ao rodar servidor web", "err", err)
 	}
