@@ -30,6 +30,26 @@ type PropertyItem struct {
 	CoverImageUrl *string  `json:"cover_image_url"`
 }
 
+type LeadItem struct {
+	ID            string  `json:"id"`
+	PropertyTitle string  `json:"property_title"`
+	Name          string  `json:"name"`
+	Email         *string `json:"email"`
+	Phone         *string `json:"phone"`
+	Message       *string `json:"message"`
+	CreatedAt     string  `json:"created_at"`
+}
+
+type UserProfile struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Email        string  `json:"email"`
+	Phone        *string `json:"phone"`
+	CpfCnpj      *string `json:"cpf_cnpj"`
+	ListingQuota int     `json:"listing_quota"`
+	ListingsUsed int     `json:"listings_used"`
+}
+
 func parsePhotos(coverURL *string) []string {
 	defaultPhotos := []string{
 		"https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
@@ -147,7 +167,7 @@ func main() {
 		userActions := `<a href="/login" class="nav-item">Entrar</a>
                         <a href="/cadastro" class="btn btn-primary">Criar Conta Grátis</a>`
 		if token != "" {
-			userActions = `<a href="/painel/imoveis" class="btn btn-primary">Painel de Imóveis</a>
+			userActions = `<a href="/painel" class="btn btn-primary">Meu Painel</a>
                            <a href="/logout" class="btn btn-outline" style="margin-left: 0.5rem;">Sair</a>`
 		}
 
@@ -161,8 +181,8 @@ func main() {
 			cardsHTML = `
             <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
                 <p style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Nenhum imóvel disponível no momento.</p>
-                <p style="margin-top: 0.5rem;">Cadastre-se e seja o primeiro anunciante a publicar um imóvel na plataforma!</p>
-                <a href="/cadastro" class="btn btn-primary" style="margin-top: 1.5rem;">Anunciar Agora Gratuitamente</a>
+                <p style="margin-top: 0.5rem;">Cadastre-se e publique seu primeiro imóvel para aluguel ou venda!</p>
+                <a href="/cadastro" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Anúncio Agora</a>
             </div>`
 		} else {
 			for _, item := range apiRes.Data {
@@ -188,7 +208,7 @@ func main() {
             </a>
             <nav class="nav-links">
                 <a href="/" class="nav-item">Explorar</a>
-                <a href="/painel/imoveis" class="nav-item">Anunciar</a>
+                <a href="/painel" class="nav-item">Painel</a>
                 ` + userActions + `
             </nav>
         </div>
@@ -197,13 +217,13 @@ func main() {
     <section class="hero-wrapper">
         <div class="container">
             <div class="hero-badge">
-                <span>✨ Plataforma Direta & Sem Burocracia</span>
+                <span>✨ Aluguel e Venda Direto com Proprietários</span>
             </div>
             <h1 class="hero-title">
-                O jeito mais inteligente de encontrar seu <span class="highlight">próximo imóvel</span>
+                Encontre o imóvel perfeito para <span class="highlight">alugar ou comprar</span>
             </h1>
             <p class="hero-subtitle">
-                Conectamos compradores, inquilinos e proprietários diretamente, com transparência total e processos 100% digitais.
+                Negocie diretamente, envie propostas em tempo real e faça tudo de forma 100% digital.
             </p>
 
             <div class="search-card">
@@ -257,13 +277,6 @@ func main() {
                     </button>
                 </div>
             </div>
-
-            <div class="quick-categories">
-                <a href="javascript:void(0)" onclick="setFilter('APARTMENT')" class="category-pill">🏢 Apartamentos</a>
-                <a href="javascript:void(0)" onclick="setFilter('HOUSE')" class="category-pill">🏡 Casas</a>
-                <a href="javascript:void(0)" onclick="setFilter('COMMERCIAL')" class="category-pill">💼 Comerciais</a>
-                <a href="javascript:void(0)" onclick="setFilter('LAND')" class="category-pill">🌱 Terrenos</a>
-            </div>
         </div>
     </section>
 
@@ -272,7 +285,7 @@ func main() {
             <div>
                 <h2 class="section-title">Imóveis Disponíveis</h2>
                 <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                    Conectados em tempo real com a base de dados oficial.
+                    Oportunidades atualizadas no PostgreSQL em tempo real.
                 </p>
             </div>
         </div>
@@ -282,33 +295,12 @@ func main() {
         </section>
     </main>
 
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="logo-wrapper">
-                    <div class="logo-icon">IX</div>
-                    <div class="logo-text">Imov<span>xen</span></div>
-                </div>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">
-                    Marketplace imobiliário conectado ao PostgreSQL 16.
-                </p>
-            </div>
-            <p style="text-align: center; color: var(--text-muted); font-size: 0.85rem;">
-                &copy; 2026 Imovxen SaaS. Todos os direitos reservados.
-            </p>
-        </div>
-    </footer>
-
     <script>
         function setPurpose(btn, purpose) {
             document.querySelectorAll('.search-tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('search-purpose').value = purpose;
             htmx.trigger('#search-q', 'keyup');
-        }
-        function setFilter(type) {
-            document.getElementById('search-type').value = type;
-            htmx.trigger('#search-type', 'change');
         }
     </script>
 </body>
@@ -332,7 +324,6 @@ func main() {
 			emptyMsg := `
             <div class="property-card" style="padding: 3rem 1.5rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
                 <p style="font-size: 1.1rem; font-weight: 600;">Nenhum imóvel encontrado para os filtros selecionados.</p>
-                <p style="font-size: 0.875rem; margin-top: 0.25rem;">Tente ajustar o termo de busca ou remover as restrições.</p>
             </div>`
 			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(emptyMsg))
 			return
@@ -346,7 +337,7 @@ func main() {
 	})
 
 	// ==========================================
-	// PÁGINA: DETALHE DO IMÓVEL COM CARROSSEL REAL
+	// PÁGINA: DETALHE DO IMÓVEL COM PROPOSTA DE ALUGUEL / VENDA
 	// ==========================================
 	r.GET("/imoveis/:id", func(c *gin.Context) {
 		id := c.Param("id")
@@ -360,14 +351,16 @@ func main() {
 
 		photos := parsePhotos(prop.CoverImageUrl)
 
+		purposeAction := "Fazer Proposta de Aluguel"
 		purposeLabel := "Aluguel"
 		priceSuffix := "<span>/mês</span>"
 		if prop.Purpose == "SALE" {
+			purposeAction = "Fazer Oferta de Compra"
 			purposeLabel = "Venda"
 			priceSuffix = ""
 		}
 
-		desc := "Imóvel disponível para negociação direta com o anunciante através da plataforma Imovxen."
+		desc := "Imóvel pronto para morar/investir com negociação direta pela plataforma."
 		if prop.Description != nil && *prop.Description != "" {
 			desc = *prop.Description
 		}
@@ -377,7 +370,6 @@ func main() {
 			areaVal = fmt.Sprintf("%.0fm²", *prop.AreaM2)
 		}
 
-		// Gera slides do carrossel
 		slidesHTML := ""
 		thumbsHTML := ""
 		for i, img := range photos {
@@ -412,7 +404,6 @@ func main() {
     <main class="container" style="margin-top: 2.5rem; margin-bottom: 5rem;">
         <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 2.5rem;">
             <div>
-                <!-- CARROSSEL DE IMAGENS -->
                 <div style="position: relative; border-radius: 1rem; overflow: hidden; box-shadow: var(--shadow-lg);">
                     ` + slidesHTML + `
                     <button onclick="prevSlide()" style="position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.6); color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 1.5rem; display: flex; align-items: center; justify-content: center;">&#10094;</button>
@@ -444,8 +435,8 @@ func main() {
 
                     <div id="lead-feedback" style="margin-top: 1rem;"></div>
 
-                    <form hx-post="/imoveis/` + id + `/contato" hx-target="#lead-feedback" style="margin-top: 1rem;">
-                        <h4 style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.75rem;">Falar com o proprietário</h4>
+                    <form hx-post="/imoveis/` + id + `/proposta" hx-target="#lead-feedback" style="margin-top: 1rem;">
+                        <h4 style="font-weight: 700; font-size: 1.1rem; margin-bottom: 0.75rem;">` + purposeAction + `</h4>
                         <div class="form-group">
                             <label>Seu Nome</label>
                             <input class="form-control" type="text" name="name" required placeholder="Nome completo">
@@ -459,11 +450,11 @@ func main() {
                             <input class="form-control" type="text" name="phone" placeholder="(11) 99999-9999">
                         </div>
                         <div class="form-group">
-                            <label>Mensagem</label>
-                            <textarea class="form-control" name="message" rows="3" placeholder="Olá, gostaria de saber mais informações sobre o imóvel."></textarea>
+                            <label>Mensagem / Termos da Proposta</label>
+                            <textarea class="form-control" name="message" rows="3" placeholder="Tenho interesse em fechar o contrato. Gostaria de agendar visita e enviar meus documentos para análise de aluguel."></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.85rem; margin-top: 0.5rem;">
-                            Enviar Mensagem Direta
+                            Enviar Proposta Oficial
                         </button>
                     </form>
                 </div>
@@ -478,55 +469,65 @@ func main() {
         function showSlide(index) {
             document.querySelectorAll('.carousel-slide').forEach(s => s.style.display = 'none');
             document.querySelectorAll('.carousel-thumb').forEach(t => t.style.borderColor = 'var(--border)');
-            
             const slide = document.getElementById('slide-' + index);
             const thumb = document.getElementById('thumb-' + index);
             if (slide) slide.style.display = 'block';
             if (thumb) thumb.style.borderColor = 'var(--primary)';
             currentSlide = index;
         }
-
-        function nextSlide() {
-            let next = (currentSlide + 1) % totalSlides;
-            showSlide(next);
-        }
-
-        function prevSlide() {
-            let prev = (currentSlide - 1 + totalSlides) % totalSlides;
-            showSlide(prev);
-        }
-
-        function goToSlide(index) {
-            showSlide(index);
-        }
+        function nextSlide() { showSlide((currentSlide + 1) % totalSlides); }
+        function prevSlide() { showSlide((currentSlide - 1 + totalSlides) % totalSlides); }
+        function goToSlide(index) { showSlide(index); }
     </script>
 </body>
 </html>`
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	})
 
-	r.POST("/imoveis/:id/contato", func(c *gin.Context) {
+	r.POST("/imoveis/:id/proposta", func(c *gin.Context) {
 		name := c.PostForm("name")
+		email := c.PostForm("email")
+		phone := c.PostForm("phone")
+		message := c.PostForm("message")
+		id := c.Param("id")
+
+		payload := map[string]interface{}{
+			"name":    name,
+			"email":   email,
+			"phone":   phone,
+			"message": message,
+		}
+		_ = apiClient.Post("/api/properties/"+id+"/leads", payload, "", nil)
+
 		msg := fmt.Sprintf(`<div class="alert alert-success">
-            <strong>Obrigado, %s!</strong><br>
-            Sua mensagem foi enviada ao anunciante com sucesso!
+            <strong>Proposta enviada com sucesso, %s!</strong><br>
+            O proprietário recebeu seu contato e a proposta já está visível no painel dele.
         </div>`, name)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(msg))
 	})
 
 	// ==========================================
-	// PÁGINA: PAINEL MEUS IMÓVEIS (COM EDIÇÃO E EXCLUSÃO)
+	// PAINEL COMPLETO DO USUÁRIO (/painel)
+	// Com: Meus Anúncios, Propostas Recebidas, Dados Pessoais e Alterar Senha
 	// ==========================================
-	r.GET("/painel/imoveis", func(c *gin.Context) {
+	r.GET("/painel", func(c *gin.Context) {
+		c.Redirect(http.StatusSeeOther, "/painel/imoveis")
+	})
+
+	r.GET("/painel/:tab", func(c *gin.Context) {
 		token, err := c.Cookie("access_token")
 		if err != nil || token == "" {
 			c.Redirect(http.StatusSeeOther, "/login")
 			return
 		}
+
+		tab := c.Param("tab")
+		if tab == "" {
+			tab = "imoveis"
+		}
+
 		var meRes struct {
-			User struct {
-				Name string `json:"name"`
-			} `json:"user"`
+			User  UserProfile `json:"user"`
 			Quota struct {
 				Used  int `json:"used"`
 				Limit int `json:"limit"`
@@ -539,25 +540,163 @@ func main() {
 		}
 		_ = apiClient.Get("/api/me/properties", token, &propsRes)
 
-		cardsHTML := ""
-		if len(propsRes.Data) == 0 {
-			cardsHTML = `
-            <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
-                <p style="font-size: 1.1rem; font-weight: 600;">Você ainda não possui anúncios ativos.</p>
-                <p style="font-size: 0.9rem; margin-top: 0.25rem;">Comece agora mesmo a divulgar seus imóveis para milhares de compradores.</p>
-                <button onclick="document.getElementById('modal-novo-imovel').style.display='block'" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Primeiro Imóvel</button>
-            </div>`
-		} else {
-			for _, p := range propsRes.Data {
-				cardsHTML += renderPropertyCard(p, true)
+		var leadsRes struct {
+			Data []LeadItem `json:"data"`
+		}
+		_ = apiClient.Get("/api/me/leads", token, &leadsRes)
+
+		// Renderiza aba de Imóveis
+		imoveisTabActive := ""
+		propostasTabActive := ""
+		perfilTabActive := ""
+
+		contentHTML := ""
+
+		if tab == "imoveis" {
+			imoveisTabActive = "active"
+			cardsHTML := ""
+			if len(propsRes.Data) == 0 {
+				cardsHTML = `
+                <div class="property-card" style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); grid-column: 1 / -1; border-style: dashed;">
+                    <p style="font-size: 1.1rem; font-weight: 600;">Você ainda não possui anúncios ativos.</p>
+                    <button onclick="abrirModalCriacao()" class="btn btn-primary" style="margin-top: 1.5rem;">Publicar Primeiro Imóvel</button>
+                </div>`
+			} else {
+				for _, p := range propsRes.Data {
+					cardsHTML += renderPropertyCard(p, true)
+				}
 			}
+
+			contentHTML = fmt.Sprintf(`
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <div>
+                    <h2 style="font-size: 1.85rem; font-weight: 800;">Meus Anúncios</h2>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                        Cota do seu plano: <strong>%d de %d anúncios gratuitos ativos</strong>
+                    </p>
+                </div>
+                <button onclick="abrirModalCriacao()" class="btn btn-primary">+ Novo Anúncio</button>
+            </div>
+            <div class="property-grid">%s</div>`, meRes.Quota.Used, meRes.Quota.Limit, cardsHTML)
+
+		} else if tab == "propostas" {
+			propostasTabActive = "active"
+			leadsHTML := ""
+			if len(leadsRes.Data) == 0 {
+				leadsHTML = `<div style="background: #fff; padding: 3rem; text-align: center; border-radius: 1rem; border: 1px dashed var(--border); color: var(--text-muted);">
+                    Nenhuma proposta recebida até o momento. Quando alguém se interessar pelo seu imóvel, aparecerá aqui.
+                </div>`
+			} else {
+				leadsHTML = `<div style="display: flex; flex-direction: column; gap: 1rem;">`
+				for _, l := range leadsRes.Data {
+					phoneVal := "Não informado"
+					if l.Phone != nil && *l.Phone != "" {
+						phoneVal = *l.Phone
+					}
+					emailVal := "Não informado"
+					if l.Email != nil && *l.Email != "" {
+						emailVal = *l.Email
+					}
+					msgVal := "Sem mensagem"
+					if l.Message != nil && *l.Message != "" {
+						msgVal = *l.Message
+					}
+
+					leadsHTML += fmt.Sprintf(`
+                    <div style="background: #ffffff; padding: 1.5rem; border-radius: 0.75rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                            <span style="font-weight: 700; font-size: 1.1rem; color: var(--text-main);">%s</span>
+                            <span class="badge-purpose" style="position: static;">Imóvel: %s</span>
+                        </div>
+                        <p style="margin-bottom: 0.5rem; color: #334155;"><strong>Mensagem:</strong> %s</p>
+                        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-muted); border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                            <div>📧 %s</div>
+                            <div>📱 %s</div>
+                            <a href="https://wa.me/55%s" target="_blank" class="btn btn-primary" style="margin-left: auto; padding: 0.25rem 0.75rem; font-size: 0.8rem;">Chamar no WhatsApp</a>
+                        </div>
+                    </div>`, l.Name, l.PropertyTitle, msgVal, emailVal, phoneVal, strings.ReplaceAll(phoneVal, " ", ""))
+				}
+				leadsHTML += `</div>`
+			}
+
+			contentHTML = fmt.Sprintf(`
+            <div style="margin-bottom: 2rem;">
+                <h2 style="font-size: 1.85rem; font-weight: 800;">Propostas & Mensagens Recebidas</h2>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                    Responda aos interessados e feche contratos diretamente.
+                </p>
+            </div>
+            %s`, leadsHTML)
+
+		} else if tab == "perfil" {
+			perfilTabActive = "active"
+			phoneVal := ""
+			if meRes.User.Phone != nil {
+				phoneVal = *meRes.User.Phone
+			}
+			cpfVal := ""
+			if meRes.User.CpfCnpj != nil {
+				cpfVal = *meRes.User.CpfCnpj
+			}
+
+			contentHTML = fmt.Sprintf(`
+            <div style="margin-bottom: 2rem;">
+                <h2 style="font-size: 1.85rem; font-weight: 800;">Meu Perfil & Segurança</h2>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                    Atualize seus dados pessoais e gerencie sua senha de acesso.
+                </p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                <!-- DADOS PESSOAIS -->
+                <div style="background: #ffffff; padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1.25rem;">Dados Cadastrais</h3>
+                    <div id="profile-feedback"></div>
+                    <form hx-put="/painel/perfil/atualizar" hx-target="#profile-feedback">
+                        <div class="form-group">
+                            <label>Nome Completo</label>
+                            <input class="form-control" type="text" name="name" required value="%s">
+                        </div>
+                        <div class="form-group">
+                            <label>E-mail (fixo da conta)</label>
+                            <input class="form-control" type="text" disabled value="%s" style="background: #e2e8f0;">
+                        </div>
+                        <div class="form-group">
+                            <label>Telefone / WhatsApp</label>
+                            <input class="form-control" type="text" name="phone" value="%s">
+                        </div>
+                        <div class="form-group">
+                            <label>CPF ou CNPJ</label>
+                            <input class="form-control" type="text" name="cpf_cnpj" value="%s" placeholder="000.000.000-00">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%%; margin-top: 1rem;">Salvar Dados</button>
+                    </form>
+                </div>
+
+                <!-- ALTERAR SENHA -->
+                <div style="background: #ffffff; padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+                    <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1.25rem;">Alterar Senha</h3>
+                    <div id="password-feedback"></div>
+                    <form hx-post="/painel/perfil/senha" hx-target="#password-feedback">
+                        <div class="form-group">
+                            <label>Senha Atual</label>
+                            <input class="form-control" type="password" name="current_password" required placeholder="Digite sua senha atual">
+                        </div>
+                        <div class="form-group">
+                            <label>Nova Senha</label>
+                            <input class="form-control" type="password" name="new_password" required minlength="6" placeholder="Mínimo 6 caracteres">
+                        </div>
+                        <button type="submit" class="btn btn-outline" style="width: 100%%; margin-top: 1rem;">Atualizar Senha</button>
+                    </form>
+                </div>
+            </div>`, meRes.User.Name, meRes.User.Email, phoneVal, cpfVal)
 		}
 
 		html := `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Painel do Anunciante — Imovxen</title>
+    <title>Painel do Usuário — Imovxen</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@2.0.3"></script>
 </head>
@@ -575,24 +714,19 @@ func main() {
         </div>
     </header>
 
-    <main class="container" style="margin-top: 2.5rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <div>
-                <h2 style="font-size: 1.85rem; font-weight: 800;">Painel de Gestão</h2>
-                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
-                    Cota ativa: <strong>` + strconv.Itoa(meRes.Quota.Used) + ` de ` + strconv.Itoa(meRes.Quota.Limit) + ` anúncios gratuitos</strong>
-                </p>
-            </div>
-            <button onclick="abrirModalCriacao()" class="btn btn-primary">+ Anunciar Imóvel</button>
+    <main class="container" style="margin-top: 2.5rem; margin-bottom: 5rem;">
+        <!-- NAVEGAÇÃO DE ABAS DO PAINEL -->
+        <div class="search-tabs" style="margin-bottom: 2.5rem;">
+            <a href="/painel/imoveis" class="search-tab-btn ` + imoveisTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">🏠 Meus Imóveis</a>
+            <a href="/painel/propostas" class="search-tab-btn ` + propostasTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">📬 Propostas Recebidas</a>
+            <a href="/painel/perfil" class="search-tab-btn ` + perfilTabActive + `" style="text-decoration: none; padding: 0.6rem 1.25rem; font-size: 1rem;">👤 Perfil & Senha</a>
         </div>
 
-        <div class="property-grid">
-            ` + cardsHTML + `
-        </div>
+        ` + contentHTML + `
 
-        <!-- MODAL DE CRIAÇÃO / EDIÇÃO DE ANÚNCIO -->
+        <!-- MODAL DE CRIAÇÃO / EDIÇÃO COM UPLOAD REAL DE ARQUIVOS -->
         <div id="modal-imovel" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 50; overflow-y: auto; padding: 2.5rem 0;">
-            <div class="form-container" style="margin: auto; max-width: 620px;">
+            <div class="form-container" style="margin: auto; max-width: 650px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h3 id="modal-title" style="font-size: 1.35rem; font-weight: 700;">Publicar Novo Imóvel</h3>
                     <button onclick="fecharModal()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
@@ -600,12 +734,13 @@ func main() {
 
                 <div id="modal-feedback"></div>
 
-                <form id="form-imovel" hx-post="/painel/imoveis/salvar" hx-target="#modal-feedback">
+                <form id="form-imovel" onsubmit="enviarImovelComUpload(event)">
                     <input type="hidden" id="form-id" name="id" value="">
+                    <input type="hidden" id="form-photos" name="photos" value="">
                     
                     <div class="form-group">
                         <label>Título do Anúncio</label>
-                        <input id="form-title" class="form-control" type="text" name="title" required placeholder="Ex: Apartamento no coração de Pinheiros">
+                        <input id="form-title" class="form-control" type="text" name="title" required placeholder="Ex: Apartamento reformado em Pinheiros">
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div class="form-group">
@@ -645,11 +780,15 @@ func main() {
                             <input id="form-state" class="form-control" type="text" name="state" required maxlength="2" placeholder="SP">
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Fotos do Imóvel (URLs separadas por vírgula para o carrossel)</label>
-                        <textarea id="form-photos" class="form-control" name="photos" rows="2" placeholder="https://exemplo.com/foto1.jpg, https://exemplo.com/foto2.jpg"></textarea>
+
+                    <!-- UPLOAD REAL DE ARQUIVOS (LOCAL MULTIPART) -->
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label>Fotos do Imóvel (Selecione imagens reais do seu computador)</label>
+                        <input id="form-files" class="form-control" type="file" multiple accept="image/*" style="padding: 0.5rem; background: #fff;">
+                        <small style="color: var(--text-muted); font-size: 0.8rem;">Você pode selecionar vários arquivos de foto juntos.</small>
                     </div>
-                    <button type="submit" id="btn-submit-modal" class="btn btn-primary" style="width: 100%; margin-top: 1.25rem; padding: 0.85rem;">Salvar Imóvel</button>
+
+                    <button type="submit" id="btn-submit-modal" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem; padding: 0.85rem;">Salvar Imóvel</button>
                 </form>
             </div>
         </div>
@@ -687,13 +826,97 @@ func main() {
         function fecharModal() {
             document.getElementById('modal-imovel').style.display = 'none';
         }
+
+        async function enviarImovelComUpload(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit-modal');
+            btn.innerText = 'Fazendo upload e salvando...';
+            btn.disabled = true;
+
+            const filesInput = document.getElementById('form-files');
+            let photoUrls = document.getElementById('form-photos').value;
+
+            // Se selecionou arquivos reais, faz o upload multipart para o backend
+            if (filesInput.files.length > 0) {
+                const formData = new FormData();
+                for (let i = 0; i < filesInput.files.length; i++) {
+                    formData.append('photos', filesInput.files[i]);
+                }
+                try {
+                    const uploadRes = await fetch('http://localhost:8080/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const uploadData = await uploadRes.json();
+                    if (uploadData.urls && uploadData.urls.length > 0) {
+                        photoUrls = uploadData.urls.join(',');
+                    }
+                } catch (err) {
+                    console.error('Erro de upload:', err);
+                }
+            }
+
+            const postData = new URLSearchParams();
+            postData.append('id', document.getElementById('form-id').value);
+            postData.append('title', document.getElementById('form-title').value);
+            postData.append('type', document.getElementById('form-type').value);
+            postData.append('purpose', document.getElementById('form-purpose').value);
+            postData.append('price', document.getElementById('form-price').value);
+            postData.append('area_m2', document.getElementById('form-area').value);
+            postData.append('city', document.getElementById('form-city').value);
+            postData.append('state', document.getElementById('form-state').value);
+            postData.append('photos', photoUrls);
+
+            const res = await fetch('/painel/imoveis/salvar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: postData.toString()
+            });
+
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                document.getElementById('modal-feedback').innerHTML = '<div class="alert alert-danger">Erro ao salvar anúncio. Verifique sua cota.</div>';
+                btn.innerText = 'Salvar Imóvel';
+                btn.disabled = false;
+            }
+        }
     </script>
 </body>
 </html>`
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 	})
 
-	// Submissão unificada (Criar ou Atualizar)
+	// Handlers de Perfil e Senha
+	r.PUT("/painel/perfil/atualizar", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		payload := map[string]interface{}{
+			"name":     c.PostForm("name"),
+			"phone":    c.PostForm("phone"),
+			"cpf_cnpj": c.PostForm("cpf_cnpj"),
+		}
+		err := apiClient.Put("/api/me/profile", payload, token, nil)
+		if err != nil {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Erro ao atualizar dados.</div>`))
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-success">Dados pessoais atualizados com sucesso!</div>`))
+	})
+
+	r.POST("/painel/perfil/senha", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		payload := map[string]interface{}{
+			"current_password": c.PostForm("current_password"),
+			"new_password":     c.PostForm("new_password"),
+		}
+		err := apiClient.Post("/api/me/password", payload, token, nil)
+		if err != nil {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Senha atual incorreta ou erro no servidor.</div>`))
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-success">Senha alterada com sucesso!</div>`))
+	})
+
 	r.POST("/painel/imoveis/salvar", func(c *gin.Context) {
 		token, _ := c.Cookie("access_token")
 		id := c.PostForm("id")
@@ -719,23 +942,18 @@ func main() {
 
 		var err error
 		if id == "" {
-			// Novo anúncio (POST)
 			err = apiClient.Post("/api/properties", payload, token, &apiRes)
 		} else {
-			// Edição de anúncio existente (PATCH)
 			err = apiClient.Patch("/api/properties/"+id, payload, token, &apiRes)
 		}
 
 		if err != nil || apiRes.ID == "" {
-			c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(`<div class="alert alert-danger">Erro ao salvar anúncio. Verifique sua cota ou dados informados.</div>`))
+			c.Status(http.StatusBadRequest)
 			return
 		}
-
-		c.Header("HX-Refresh", "true")
 		c.Status(http.StatusOK)
 	})
 
-	// Exclusão de imóvel (DELETE)
 	r.DELETE("/painel/imoveis/:id", func(c *gin.Context) {
 		token, _ := c.Cookie("access_token")
 		id := c.Param("id")
@@ -749,7 +967,7 @@ func main() {
 		c.Status(http.StatusOK)
 	})
 
-	// Páginas de Auth
+	// Páginas de Cadastro e Login
 	r.GET("/cadastro", func(c *gin.Context) {
 		html := `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -862,7 +1080,7 @@ func main() {
 		}
 		c.SetCookie("access_token", apiRes.AccessToken, 900, "/", "", false, true)
 		c.SetCookie("refresh_token", apiRes.RefreshToken, 604800, "/", "", false, true)
-		c.Header("HX-Redirect", "/painel/imoveis")
+		c.Header("HX-Redirect", "/painel")
 		c.Status(http.StatusOK)
 	})
 
@@ -882,7 +1100,7 @@ func main() {
 		}
 		c.SetCookie("access_token", apiRes.AccessToken, 900, "/", "", false, true)
 		c.SetCookie("refresh_token", apiRes.RefreshToken, 604800, "/", "", false, true)
-		c.Header("HX-Redirect", "/painel/imoveis")
+		c.Header("HX-Redirect", "/painel")
 		c.Status(http.StatusOK)
 	})
 
@@ -892,7 +1110,7 @@ func main() {
 		c.Redirect(http.StatusSeeOther, "/")
 	})
 
-	slog.Info("Servidor Frontend com Carrossel e Gestao Completa", "porta", port)
+	slog.Info("Servidor Frontend com Painel Completo do Usuario", "porta", port)
 	if err := r.Run(":" + port); err != nil {
 		slog.Error("Falha ao rodar servidor web", "err", err)
 	}

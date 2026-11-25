@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -35,10 +38,17 @@ func main() {
 	}
 	defer database.Close()
 
+	// Pasta para uploads de arquivos reais
+	_ = os.MkdirAll("./uploads", os.ModePerm)
+
 	tokenService := auth.NewTokenService(cfg.JWTSecret, cfg.JWTTTLMinutes, cfg.RefreshTokenTTLDays)
 	storageService := storage.NewStorageService(cfg)
+	_ = storageService
 
 	r := gin.Default()
+
+	// Servir uploads de fotos estáticas
+	r.Static("/uploads", "./uploads")
 
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
@@ -59,6 +69,52 @@ func main() {
 
 	api := r.Group("/api")
 	{
+		// ==========================================
+		// UPLOAD REAL MULTIPART DE ARQUIVOS
+		// ==========================================
+		api.POST("/upload", func(c *gin.Context) {
+			form, err := c.MultipartForm()
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao processar formulário de upload"})
+				return
+			}
+
+			files := form.File["photos"]
+			if len(files) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Nenhum arquivo enviado"})
+				return
+			}
+
+			var fileURLs []string
+			for _, file := range files {
+				ext := filepath.Ext(file.Filename)
+				if ext == "" {
+					ext = ".jpg"
+				}
+				fileName := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+				dstPath := filepath.Join("./uploads", fileName)
+
+				src, err := file.Open()
+				if err != nil {
+					continue
+				}
+				defer src.Close()
+
+				dst, err := os.Create(dstPath)
+				if err != nil {
+					continue
+				}
+				defer dst.Close()
+
+				_, _ = io.Copy(dst, src)
+				fileURLs = append(fileURLs, "http://localhost:8080/uploads/"+fileName)
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"urls": fileURLs,
+			})
+		})
+
 		// ==========================================
 		// AUTH
 		// ==========================================
@@ -117,6 +173,8 @@ func main() {
 						"id":            user.ID,
 						"name":          user.Name,
 						"email":         user.Email,
+						"phone":         user.Phone,
+						"cpf_cnpj":      user.CpfCnpj,
 						"role":          user.Role,
 						"listing_quota": user.ListingQuota,
 						"listings_used": user.ListingsUsed,
@@ -155,53 +213,18 @@ func main() {
 						"id":            user.ID,
 						"name":          user.Name,
 						"email":         user.Email,
+						"phone":         user.Phone,
+						"cpf_cnpj":      user.CpfCnpj,
 						"role":          user.Role,
 						"listing_quota": user.ListingQuota,
 						"listings_used": user.ListingsUsed,
 					},
 				})
 			})
-
-			authGroup.POST("/refresh", func(c *gin.Context) {
-				var req struct {
-					RefreshToken string `json:"refresh_token" binding:"required"`
-				}
-				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-
-				tokenHash := auth.HashRawRefreshToken(req.RefreshToken)
-				savedToken, err := database.Queries.GetRefreshToken(c.Request.Context(), tokenHash)
-				if err != nil {
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expirado ou inválido"})
-					return
-				}
-
-				user, err := database.Queries.GetUserByID(c.Request.Context(), savedToken.UserID)
-				if err != nil {
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário não encontrado"})
-					return
-				}
-
-				database.Queries.RevokeRefreshToken(c.Request.Context(), tokenHash)
-				newAccessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
-				newRawRefresh, newHashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
-				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
-					UserID:    user.ID,
-					TokenHash: newHashRefresh,
-					ExpiresAt: expiresAt,
-				})
-
-				c.JSON(http.StatusOK, gin.H{
-					"access_token":  newAccessToken,
-					"refresh_token": newRawRefresh,
-				})
-			})
 		}
 
 		// ==========================================
-		// USUÁRIO AUTENTICADO
+		// USUÁRIO, PERFIL E DADOS PESSOAIS
 		// ==========================================
 		api.GET("/me", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
@@ -213,10 +236,12 @@ func main() {
 
 			c.JSON(http.StatusOK, gin.H{
 				"user": gin.H{
-					"id":    user.ID,
-					"name":  user.Name,
-					"email": user.Email,
-					"role":  user.Role,
+					"id":       user.ID,
+					"name":     user.Name,
+					"email":    user.Email,
+					"phone":    user.Phone,
+					"cpf_cnpj": user.CpfCnpj,
+					"role":     user.Role,
 				},
 				"quota": gin.H{
 					"used":  user.ListingsUsed,
@@ -225,10 +250,115 @@ func main() {
 			})
 		})
 
+		// Atualizar Dados Pessoais / Perfil
+		api.PUT("/me/profile", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			userID, _ := auth.GetContextUserID(c)
+
+			var req struct {
+				Name    string  `json:"name" binding:"required"`
+				Phone   *string `json:"phone"`
+				CpfCnpj *string `json:"cpf_cnpj"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			updated, err := database.Queries.UpdateUserProfile(c.Request.Context(), db.UpdateUserProfileParams{
+				ID:      userID,
+				Name:    req.Name,
+				Phone:   req.Phone,
+				CpfCnpj: req.CpfCnpj,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar perfil"})
+				return
+			}
+
+			c.JSON(http.StatusOK, updated)
+		})
+
+		// Alterar Senha
+		api.POST("/me/password", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			userID, _ := auth.GetContextUserID(c)
+
+			var req struct {
+				CurrentPassword string `json:"current_password" binding:"required"`
+				NewPassword     string `json:"new_password" binding:"required,min=6"`
+			}
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
+			if err != nil || !auth.CheckPasswordHash(req.CurrentPassword, user.PasswordHash) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Senha atual incorreta"})
+				return
+			}
+
+			newHash, err := auth.HashPassword(req.NewPassword)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao processar nova senha"})
+				return
+			}
+
+			err = database.Queries.UpdateUserPassword(c.Request.Context(), db.UpdateUserPasswordParams{
+				ID:           userID,
+				PasswordHash: newHash,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao atualizar senha no banco"})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{"message": "Senha alterada com sucesso!"})
+		})
+
 		// ==========================================
-		// IMÓVEIS (TASK-004)
+		// LEADS E PROPOSTAS DE ALUGUEL / COMPRA
 		// ==========================================
-		// Busca pública com filtros no PostgreSQL REAL
+		api.GET("/me/leads", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			userID, _ := auth.GetContextUserID(c)
+			leads, err := database.Queries.ListLeadsForOwner(c.Request.Context(), userID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar propostas"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": leads})
+		})
+
+		api.POST("/properties/:id/leads", func(c *gin.Context) {
+			propertyID, err := uuid.Parse(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
+				return
+			}
+
+			var req properties.CreateLeadDTO
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			createdLead, err := database.Queries.CreateLead(c.Request.Context(), db.CreateLeadParams{
+				PropertyID: propertyID,
+				Name:       req.Name,
+				Email:      req.Email,
+				Phone:      req.Phone,
+				Message:    req.Message,
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao enviar proposta"})
+				return
+			}
+
+			c.JSON(http.StatusCreated, createdLead)
+		})
+
+		// ==========================================
+		// IMÓVEIS (CRUD)
+		// ==========================================
 		api.GET("/properties", func(c *gin.Context) {
 			q := c.Query("q")
 			if q == "" {
@@ -265,7 +395,6 @@ func main() {
 			})
 		})
 
-		// Detalhe público de um imóvel
 		api.GET("/properties/:id", func(c *gin.Context) {
 			id, err := uuid.Parse(c.Param("id"))
 			if err != nil {
@@ -282,7 +411,6 @@ func main() {
 			c.JSON(http.StatusOK, prop)
 		})
 
-		// Criar imóvel com validação atômica de cota
 		api.POST("/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
@@ -338,7 +466,6 @@ func main() {
 			c.JSON(http.StatusCreated, prop)
 		})
 
-		// Meus Imóveis
 		api.GET("/me/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			props, err := database.Queries.ListPropertiesByUser(c.Request.Context(), userID)
@@ -349,7 +476,6 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"data": props})
 		})
 
-		// Editar Imóvel (PATCH)
 		api.PATCH("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			propID, err := uuid.Parse(c.Param("id"))
@@ -390,7 +516,6 @@ func main() {
 			c.JSON(http.StatusOK, updated)
 		})
 
-		// Excluir Imóvel (DELETE)
 		api.DELETE("/properties/:id", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			propID, err := uuid.Parse(c.Param("id"))
@@ -410,75 +535,7 @@ func main() {
 
 			c.JSON(http.StatusOK, gin.H{"message": "Anúncio excluído com sucesso"})
 		})
-
-		// ==========================================
-		// LEADS (TASK-004)
-		// ==========================================
-		api.POST("/properties/:id/leads", func(c *gin.Context) {
-			propertyID, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
-				return
-			}
-
-			var req properties.CreateLeadDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			leadID := uuid.New()
-			c.JSON(http.StatusCreated, gin.H{
-				"id":          leadID,
-				"property_id": propertyID,
-				"name":        req.Name,
-				"status":      "NEW",
-				"message":     "Mensagem enviada com sucesso ao proprietário!",
-			})
-		})
-
-		// ==========================================
-		// UPLOAD DE IMAGENS DIRETO (TASK-005)
-		// ==========================================
-		api.POST("/properties/:id/images/presign", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			propertyID, err := uuid.Parse(c.Param("id"))
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
-				return
-			}
-
-			var req properties.PresignImageDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			presignRes, err := storageService.GeneratePresignedUploadURL(c.Request.Context(), propertyID, req.Filename, req.MimeType)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			c.JSON(http.StatusOK, presignRes)
-		})
-
-		api.POST("/properties/:id/images/confirm", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
-			var req properties.ConfirmImageDTO
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			c.JSON(http.StatusCreated, gin.H{
-				"id":       uuid.New(),
-				"url":      req.URL,
-				"position": req.Position,
-				"is_cover": req.IsCover,
-			})
-		})
 	}
-
-	_ = strconv.Itoa(0)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,

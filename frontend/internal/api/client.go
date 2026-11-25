@@ -48,6 +48,10 @@ func (c *Client) Post(endpoint string, body interface{}, token string, out inter
 	return c.sendWithBody("POST", endpoint, body, token, out)
 }
 
+func (c *Client) Put(endpoint string, body interface{}, token string, out interface{}) error {
+	return c.sendWithBody("PUT", endpoint, body, token, out)
+}
+
 func (c *Client) Patch(endpoint string, body interface{}, token string, out interface{}) error {
 	return c.sendWithBody("PATCH", endpoint, body, token, out)
 }
