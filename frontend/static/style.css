@@ -48,7 +48,7 @@ body {
 }
 
 .nav-links a {
-  margin-left: 1rem;
+  margin-left: 0.75rem;
   color: var(--text-main);
   text-decoration: none;
   font-weight: 500;
@@ -61,7 +61,8 @@ body {
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
+  text-align: center;
 }
 
 .btn-primary {
@@ -71,6 +72,16 @@ body {
 
 .btn-primary:hover {
   background-color: var(--primary-hover);
+}
+
+.btn-outline {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text-main);
+}
+
+.btn-outline:hover {
+  background-color: #f1f5f9;
 }
 
 .hero {
@@ -123,4 +134,58 @@ body {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--primary);
+}
+
+/* Formulários */
+.form-container {
+  max-width: 450px;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: #ffffff;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  font-size: 0.95rem;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.alert-danger {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.alert-success {
+  background-color: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
 }
