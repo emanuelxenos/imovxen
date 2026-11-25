@@ -70,7 +70,7 @@ func main() {
 	api := r.Group("/api")
 	{
 		// ==========================================
-		// UPLOAD REAL MULTIPART DE ARQUIVOS
+		// UPLOAD REAL COM PROCESSAMENTO & COMPRESSÃO AUTOMÁTICA
 		// ==========================================
 		api.POST("/upload", func(c *gin.Context) {
 			form, err := c.MultipartForm()
@@ -87,26 +87,27 @@ func main() {
 
 			var fileURLs []string
 			for _, file := range files {
-				ext := filepath.Ext(file.Filename)
-				if ext == "" {
-					ext = ".jpg"
-				}
-				fileName := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+				fileName := fmt.Sprintf("%s.jpg", uuid.New().String())
 				dstPath := filepath.Join("./uploads", fileName)
 
 				src, err := file.Open()
 				if err != nil {
 					continue
 				}
-				defer src.Close()
 
-				dst, err := os.Create(dstPath)
+				// Processa, redimensiona (max 1600px Lanczos3) e comprime a imagem automaticamente
+				err = storage.ProcessAndOptimizeImage(src, dstPath)
+				src.Close()
+
 				if err != nil {
-					continue
+					// Fallback de segurança se o formato for exótico
+					srcFallback, _ := file.Open()
+					dstFallback, _ := os.Create(dstPath)
+					_, _ = io.Copy(dstFallback, srcFallback)
+					srcFallback.Close()
+					dstFallback.Close()
 				}
-				defer dst.Close()
 
-				_, _ = io.Copy(dst, src)
 				fileURLs = append(fileURLs, "http://localhost:8080/uploads/"+fileName)
 			}
 
