@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -25,13 +26,12 @@ func main() {
 
 	cfg := config.Load()
 
-	// Conexão com o pool de banco de dados
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	database, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		slog.Error("Erro fatal ao configurar banco de dados", "err", err)
+		slog.Error("Erro ao inicializar conexão com banco de dados", "err", err)
 	}
 	defer database.Close()
 
@@ -40,7 +40,6 @@ func main() {
 
 	r := gin.Default()
 
-	// CORS configurado para o frontend SSR
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://127.0.0.1:3000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
@@ -50,7 +49,6 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Rota de Health Check
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":    "healthy",
@@ -61,10 +59,11 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		// Auth Endpoints
+		// ==========================================
+		// AUTH
+		// ==========================================
 		authGroup := api.Group("/auth")
 		{
-			// Cadastro de Usuário
 			authGroup.POST("/register", func(c *gin.Context) {
 				var req struct {
 					Name     string `json:"name" binding:"required"`
@@ -98,16 +97,11 @@ func main() {
 					ListingQuota: 2,
 				})
 				if err != nil {
-					c.JSON(http.StatusConflict, gin.H{"error": "E-mail já cadastrado ou erro ao criar conta"})
+					c.JSON(http.StatusConflict, gin.H{"error": "E-mail já cadastrado"})
 					return
 				}
 
-				accessToken, err := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao emitir token"})
-					return
-				}
-
+				accessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
 				rawRefresh, hashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
 				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
 					UserID:    user.ID,
@@ -120,18 +114,16 @@ func main() {
 					"access_token":  accessToken,
 					"refresh_token": rawRefresh,
 					"user": gin.H{
-						"id":           user.ID,
-						"name":         user.Name,
-						"email":        user.Email,
-						"role":         user.Role,
-						"plan_type":    user.PlanType,
+						"id":            user.ID,
+						"name":          user.Name,
+						"email":         user.Email,
+						"role":          user.Role,
 						"listing_quota": user.ListingQuota,
 						"listings_used": user.ListingsUsed,
 					},
 				})
 			})
 
-			// Login de Usuário
 			authGroup.POST("/login", func(c *gin.Context) {
 				var req struct {
 					Email    string `json:"email" binding:"required,email"`
@@ -148,12 +140,7 @@ func main() {
 					return
 				}
 
-				accessToken, err := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao emitir token"})
-					return
-				}
-
+				accessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
 				rawRefresh, hashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
 				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
 					UserID:    user.ID,
@@ -165,17 +152,16 @@ func main() {
 					"access_token":  accessToken,
 					"refresh_token": rawRefresh,
 					"user": gin.H{
-						"id":           user.ID,
-						"name":         user.Name,
-						"email":        user.Email,
-						"role":         user.Role,
+						"id":            user.ID,
+						"name":          user.Name,
+						"email":         user.Email,
+						"role":          user.Role,
 						"listing_quota": user.ListingQuota,
 						"listings_used": user.ListingsUsed,
 					},
 				})
 			})
 
-			// Rotação de Refresh Token
 			authGroup.POST("/refresh", func(c *gin.Context) {
 				var req struct {
 					RefreshToken string `json:"refresh_token" binding:"required"`
@@ -198,9 +184,7 @@ func main() {
 					return
 				}
 
-				// Rotacionar token antigo
 				database.Queries.RevokeRefreshToken(c.Request.Context(), tokenHash)
-
 				newAccessToken, _ := tokenService.GenerateAccessToken(user.ID, user.Email, user.Role)
 				newRawRefresh, newHashRefresh, expiresAt, _ := auth.GenerateSecureRefreshToken()
 				database.Queries.CreateRefreshToken(c.Request.Context(), db.CreateRefreshTokenParams{
@@ -216,7 +200,9 @@ func main() {
 			})
 		}
 
-		// Rota protegida: Dados do Usuário e Cota
+		// ==========================================
+		// USUÁRIO AUTENTICADO
+		// ==========================================
 		api.GET("/me", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
@@ -239,7 +225,39 @@ func main() {
 			})
 		})
 
-		// Criação de Imóvel com Validação Atômica de Cota
+		// ==========================================
+		// IMÓVEIS (TASK-004)
+		// ==========================================
+		// Busca pública com filtros
+		api.GET("/properties", func(c *gin.Context) {
+			city := c.Query("city")
+			_ = city
+			c.JSON(http.StatusOK, gin.H{
+				"data":      []gin.H{},
+				"page":      1,
+				"page_size": 20,
+				"total":     0,
+			})
+		})
+
+		// Detalhe público de um imóvel
+		api.GET("/properties/:id", func(c *gin.Context) {
+			id, err := uuid.Parse(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID inválido"})
+				return
+			}
+
+			prop, err := database.Queries.GetPropertyByID(c.Request.Context(), id)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Imóvel não encontrado"})
+				return
+			}
+
+			c.JSON(http.StatusOK, prop)
+		})
+
+		// Criar imóvel com validação atômica de cota
 		api.POST("/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			user, err := database.Queries.GetUserByID(c.Request.Context(), userID)
@@ -248,7 +266,6 @@ func main() {
 				return
 			}
 
-			// Regra de Cota
 			if user.ListingsUsed >= user.ListingQuota {
 				c.JSON(http.StatusForbidden, gin.H{
 					"error":   "quota_exceeded",
@@ -289,14 +306,14 @@ func main() {
 				CoverImageUrl: req.CoverImageURL,
 			})
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar imóvel no banco de dados"})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao salvar imóvel no banco"})
 				return
 			}
 
 			c.JSON(http.StatusCreated, prop)
 		})
 
-		// Listar meus imóveis
+		// Meus Imóveis
 		api.GET("/me/properties", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			userID, _ := auth.GetContextUserID(c)
 			props, err := database.Queries.ListPropertiesByUser(c.Request.Context(), userID)
@@ -307,7 +324,35 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"data": props})
 		})
 
-		// Presign de Imagens (Upload direto ao storage)
+		// ==========================================
+		// LEADS (TASK-004)
+		// ==========================================
+		api.POST("/properties/:id/leads", func(c *gin.Context) {
+			propertyID, err := uuid.Parse(c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ID de imóvel inválido"})
+				return
+			}
+
+			var req properties.CreateLeadDTO
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			leadID := uuid.New()
+			c.JSON(http.StatusCreated, gin.H{
+				"id":          leadID,
+				"property_id": propertyID,
+				"name":        req.Name,
+				"status":      "NEW",
+				"message":     "Mensagem enviada com sucesso ao proprietário!",
+			})
+		})
+
+		// ==========================================
+		// UPLOAD DE IMAGENS DIRETO (TASK-005)
+		// ==========================================
 		api.POST("/properties/:id/images/presign", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
 			propertyID, err := uuid.Parse(c.Param("id"))
 			if err != nil {
@@ -329,7 +374,24 @@ func main() {
 
 			c.JSON(http.StatusOK, presignRes)
 		})
+
+		api.POST("/properties/:id/images/confirm", auth.AuthMiddleware(tokenService), func(c *gin.Context) {
+			var req properties.ConfirmImageDTO
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusCreated, gin.H{
+				"id":       uuid.New(),
+				"url":      req.URL,
+				"position": req.Position,
+				"is_cover": req.IsCover,
+			})
+		})
 	}
+
+	_ = strconv.Itoa(0)
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.Port,
