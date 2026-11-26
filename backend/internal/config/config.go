@@ -30,13 +30,11 @@ type Config struct {
 }
 
 func Load() *Config {
-	// Tenta carregar .env da pasta local ou da raiz do projeto
+	// Carrega exclusivamente o .env local do backend
 	if err := godotenv.Load(".env"); err != nil {
-		if errRoot := godotenv.Load("../.env"); errRoot == nil {
-			slog.Info("Arquivo .env carregado da raiz do projeto")
-		}
+		slog.Info("Backend: nenhum arquivo .env local encontrado, utilizando variáveis do ambiente do sistema/container")
 	} else {
-		slog.Info("Arquivo .env carregado com sucesso")
+		slog.Info("Backend: arquivo .env local carregado com sucesso")
 	}
 
 	jwtTTL, _ := strconv.Atoi(getEnv("JWT_TTL_MINUTES", "15"))

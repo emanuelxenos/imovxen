@@ -195,13 +195,11 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	// Carrega .env da pasta ou da raiz
+	// Carrega exclusivamente o .env local do frontend
 	if err := godotenv.Load(".env"); err != nil {
-		if errRoot := godotenv.Load("../.env"); errRoot == nil {
-			slog.Info("Frontend: arquivo .env carregado da raiz do projeto")
-		}
+		slog.Info("Frontend: nenhum arquivo .env local encontrado, utilizando variáveis do ambiente do sistema/container")
 	} else {
-		slog.Info("Frontend: arquivo .env carregado com sucesso")
+		slog.Info("Frontend: arquivo .env local carregado com sucesso")
 	}
 
 	port := os.Getenv("WEB_PORT")
