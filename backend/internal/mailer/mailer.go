@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/smtp"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -19,20 +18,12 @@ type Mailer struct {
 	Enabled  bool
 }
 
-func NewMailer() *Mailer {
-	host := os.Getenv("SMTP_HOST")
-	portStr := os.Getenv("SMTP_PORT")
-	user := os.Getenv("SMTP_USER")
-	pass := os.Getenv("SMTP_PASS")
-	from := os.Getenv("MAIL_FROM")
-
+func NewMailer(host string, port int, user, pass, from string) *Mailer {
 	if from == "" {
 		from = "nao-responda@imovxen.com.br"
 	}
-
-	port := 587
-	if p, err := strconv.Atoi(portStr); err == nil && p > 0 {
-		port = p
+	if port <= 0 {
+		port = 587
 	}
 
 	enabled := host != "" && user != ""

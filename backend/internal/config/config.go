@@ -1,8 +1,11 @@
 package config
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -17,12 +20,29 @@ type Config struct {
 	S3Bucket            string
 	S3PublicBaseURL     string
 	S3UsePathStyle      bool
+	AsaasAPIKey         string
+	AsaasEnv            string
+	SMTPHost            string
+	SMTPPort            int
+	SMTPUser            string
+	SMTPPass            string
+	MailFrom            string
 }
 
 func Load() *Config {
+	// Tenta carregar .env da pasta local ou da raiz do projeto
+	if err := godotenv.Load(".env"); err != nil {
+		if errRoot := godotenv.Load("../.env"); errRoot == nil {
+			slog.Info("Arquivo .env carregado da raiz do projeto")
+		}
+	} else {
+		slog.Info("Arquivo .env carregado com sucesso")
+	}
+
 	jwtTTL, _ := strconv.Atoi(getEnv("JWT_TTL_MINUTES", "15"))
 	refreshTTL, _ := strconv.Atoi(getEnv("REFRESH_TOKEN_TTL_DAYS", "7"))
 	pathStyle, _ := strconv.ParseBool(getEnv("S3_USE_PATH_STYLE", "true"))
+	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
 
 	return &Config{
 		Port:                getEnv("PORT", "8080"),
@@ -36,6 +56,13 @@ func Load() *Config {
 		S3Bucket:            getEnv("S3_BUCKET", "imovxen-images"),
 		S3PublicBaseURL:     getEnv("S3_PUBLIC_BASE_URL", "http://localhost:9000/imovxen-images"),
 		S3UsePathStyle:      pathStyle,
+		AsaasAPIKey:         getEnv("ASAAS_API_KEY", ""),
+		AsaasEnv:            getEnv("ASAAS_ENV", "sandbox"),
+		SMTPHost:            getEnv("SMTP_HOST", ""),
+		SMTPPort:            smtpPort,
+		SMTPUser:            getEnv("SMTP_USER", ""),
+		SMTPPass:            getEnv("SMTP_PASS", ""),
+		MailFrom:            getEnv("MAIL_FROM", "nao-responda@imovxen.com.br"),
 	}
 }
 

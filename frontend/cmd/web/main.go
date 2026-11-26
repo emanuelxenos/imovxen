@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/imovxen/frontend/internal/api"
+	"github.com/joho/godotenv"
 )
 
 type PropertyItem struct {
@@ -193,6 +194,15 @@ func renderPropertyCard(p PropertyItem, isOwner bool) string {
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+
+	// Carrega .env da pasta ou da raiz
+	if err := godotenv.Load(".env"); err != nil {
+		if errRoot := godotenv.Load("../.env"); errRoot == nil {
+			slog.Info("Frontend: arquivo .env carregado da raiz do projeto")
+		}
+	} else {
+		slog.Info("Frontend: arquivo .env carregado com sucesso")
+	}
 
 	port := os.Getenv("WEB_PORT")
 	if port == "" {

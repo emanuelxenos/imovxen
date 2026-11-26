@@ -44,15 +44,15 @@ func main() {
 	tokenService := auth.NewTokenService(cfg.JWTSecret, cfg.JWTTTLMinutes, cfg.RefreshTokenTTLDays)
 	storageService := storage.NewStorageService(cfg)
 	_ = storageService
-	mailService := mailer.NewMailer()
+	mailService := mailer.NewMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.MailFrom)
 
 	// Handlers de domínio
 	authHandler := auth.NewHandler(database, tokenService)
 	usersHandler := users.NewHandler(database, tokenService)
 	propertiesHandler := properties.NewHandler(database, tokenService)
 	leadsHandler := leads.NewHandler(database, tokenService, mailService)
-	paymentsHandler := payments.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production", mailService)
-	contractsHandler := contracts.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production", mailService)
+	paymentsHandler := payments.NewHandler(database, tokenService, cfg.AsaasAPIKey, cfg.AsaasEnv == "production", mailService)
+	contractsHandler := contracts.NewHandler(database, tokenService, cfg.AsaasAPIKey, cfg.AsaasEnv == "production", mailService)
 
 	r := gin.Default()
 
