@@ -9,19 +9,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/imovxen/backend/internal/auth"
 	"github.com/imovxen/backend/internal/db"
+	"github.com/imovxen/backend/internal/mailer"
 )
 
 type Handler struct {
 	db           *db.Database
 	tokenService *auth.TokenService
 	asaas        *AsaasClient
+	mailer       *mailer.Mailer
 }
 
-func NewHandler(database *db.Database, tokenService *auth.TokenService, asaasKey string, isProd bool) *Handler {
+func NewHandler(database *db.Database, tokenService *auth.TokenService, asaasKey string, isProd bool, mailService *mailer.Mailer) *Handler {
 	return &Handler{
 		db:           database,
 		tokenService: tokenService,
 		asaas:        NewAsaasClient(asaasKey, isProd),
+		mailer:       mailService,
 	}
 }
 
@@ -216,6 +219,10 @@ func (h *Handler) WebhookAsaas(c *gin.Context) {
 			slog.Warn("Pagamento do webhook não localizado no banco local", "gateway_id", payload.Payment.ID)
 		} else {
 			slog.Info("Cota creditada com sucesso via webhook", "payment_id", updated.ID, "items", updated.ItemsCount)
+			// Disparar e-mail de confirmação ao anunciante
+			if u, err := h.db.Queries.GetUserByID(c.Request.Context(), updated.UserID); err == nil {
+				h.mailer.SendPaymentConfirmed(u.Email, u.Name, "Pacote de Anúncios", updated.ItemsCount, updated.Amount)
+			}
 		}
 	}
 
@@ -234,6 +241,11 @@ func (h *Handler) SimulatePaymentApproval(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao aprovar pagamento"})
 		return
+	}
+
+	// Disparar e-mail de confirmação
+	if u, err := h.db.Queries.GetUserByID(c.Request.Context(), updated.UserID); err == nil {
+		h.mailer.SendPaymentConfirmed(u.Email, u.Name, "Pacote de Anúncios", updated.ItemsCount, updated.Amount)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -7,18 +7,21 @@ import (
 	"github.com/google/uuid"
 	"github.com/imovxen/backend/internal/auth"
 	"github.com/imovxen/backend/internal/db"
+	"github.com/imovxen/backend/internal/mailer"
 	"github.com/imovxen/backend/internal/properties"
 )
 
 type Handler struct {
 	db           *db.Database
 	tokenService *auth.TokenService
+	mailer       *mailer.Mailer
 }
 
-func NewHandler(database *db.Database, tokenService *auth.TokenService) *Handler {
+func NewHandler(database *db.Database, tokenService *auth.TokenService, mailService *mailer.Mailer) *Handler {
 	return &Handler{
 		db:           database,
 		tokenService: tokenService,
+		mailer:       mailService,
 	}
 }
 
@@ -57,6 +60,25 @@ func (h *Handler) CreateLead(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao enviar proposta"})
 		return
+	}
+
+	// Disparo automático de e-mail ao proprietário em background
+	if prop, err := h.db.Queries.GetPropertyByID(c.Request.Context(), propertyID); err == nil {
+		if owner, err := h.db.Queries.GetUserByID(c.Request.Context(), prop.UserID); err == nil {
+			phoneStr := ""
+			if req.Phone != nil {
+				phoneStr = *req.Phone
+			}
+			emailStr := ""
+			if req.Email != nil {
+				emailStr = *req.Email
+			}
+			msgStr := ""
+			if req.Message != nil {
+				msgStr = *req.Message
+			}
+			h.mailer.SendLeadNotification(owner.Email, owner.Name, prop.Title, req.Name, phoneStr, emailStr, msgStr)
+		}
 	}
 
 	c.JSON(http.StatusCreated, createdLead)

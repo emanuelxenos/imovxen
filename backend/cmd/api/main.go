@@ -16,6 +16,7 @@ import (
 	"github.com/imovxen/backend/internal/contracts"
 	"github.com/imovxen/backend/internal/db"
 	"github.com/imovxen/backend/internal/leads"
+	"github.com/imovxen/backend/internal/mailer"
 	"github.com/imovxen/backend/internal/payments"
 	"github.com/imovxen/backend/internal/properties"
 	"github.com/imovxen/backend/internal/storage"
@@ -43,14 +44,15 @@ func main() {
 	tokenService := auth.NewTokenService(cfg.JWTSecret, cfg.JWTTTLMinutes, cfg.RefreshTokenTTLDays)
 	storageService := storage.NewStorageService(cfg)
 	_ = storageService
+	mailService := mailer.NewMailer()
 
 	// Handlers de domínio
 	authHandler := auth.NewHandler(database, tokenService)
 	usersHandler := users.NewHandler(database, tokenService)
 	propertiesHandler := properties.NewHandler(database, tokenService)
-	leadsHandler := leads.NewHandler(database, tokenService)
-	paymentsHandler := payments.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production")
-	contractsHandler := contracts.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production")
+	leadsHandler := leads.NewHandler(database, tokenService, mailService)
+	paymentsHandler := payments.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production", mailService)
+	contractsHandler := contracts.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production", mailService)
 
 	r := gin.Default()
 

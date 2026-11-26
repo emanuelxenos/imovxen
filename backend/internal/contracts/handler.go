@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/imovxen/backend/internal/auth"
 	"github.com/imovxen/backend/internal/db"
+	"github.com/imovxen/backend/internal/mailer"
 	"github.com/imovxen/backend/internal/payments"
 )
 
@@ -17,13 +18,15 @@ type Handler struct {
 	db           *db.Database
 	tokenService *auth.TokenService
 	asaas        *payments.AsaasClient
+	mailer       *mailer.Mailer
 }
 
-func NewHandler(database *db.Database, tokenService *auth.TokenService, asaasKey string, isProd bool) *Handler {
+func NewHandler(database *db.Database, tokenService *auth.TokenService, asaasKey string, isProd bool, mailService *mailer.Mailer) *Handler {
 	return &Handler{
 		db:           database,
 		tokenService: tokenService,
 		asaas:        payments.NewAsaasClient(asaasKey, isProd),
+		mailer:       mailService,
 	}
 }
 
@@ -245,6 +248,11 @@ func (h *Handler) ConfirmManualPayment(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao registrar quitação manual"})
 		return
+	}
+
+	// Disparo automático do recibo por e-mail para proprietário e inquilino
+	if landlord, err := h.db.Queries.GetUserByID(c.Request.Context(), landlordID); err == nil {
+		h.mailer.SendRentalReceipt(landlord.Email, landlord.Name, inst.PropertyTitle, inst.InstallmentNumber, inst.Amount, inst.DueDate.Format("02/01/2006"), receiptCode, true)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
