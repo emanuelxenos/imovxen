@@ -50,6 +50,30 @@ type UserProfile struct {
 	ListingsUsed int     `json:"listings_used"`
 }
 
+type PaymentRecord struct {
+	ID          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	Amount      float64 `json:"amount"`
+	ItemsCount  int     `json:"items_count"`
+	DueDate     string  `json:"due_date"`
+	Status      string  `json:"status"`
+	Method      string  `json:"method"`
+	GatewayID   *string `json:"gateway_id"`
+	PixCode     *string `json:"pix_code"`
+	PixQrBase64 *string `json:"pix_qr_base64"`
+	PaidAt      *string `json:"paid_at"`
+	CreatedAt   string  `json:"created_at"`
+}
+
+type PlanPackageItem struct {
+	ID             string  `json:"id"`
+	Title          string  `json:"title"`
+	Description    string  `json:"description"`
+	Listings       int     `json:"listings"`
+	Price          float64 `json:"price"`
+	PriceFormatted string  `json:"price_formatted"`
+}
+
 func parsePhotos(coverURL *string) []string {
 	defaultPhotos := []string{
 		"https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
@@ -607,6 +631,7 @@ func main() {
 		// Classes ativas para a Sidebar
 		imoveisClass := ""
 		propostasClass := ""
+		financeiroClass := ""
 		perfilClass := ""
 
 		mainContent := ""
@@ -693,6 +718,103 @@ func main() {
                 </p>
             </div>
             %s`, leadsHTML)
+
+		} else if tab == "financeiro" {
+			financeiroClass = "active"
+			pageTitle = "Planos & Cotas de Anúncio"
+
+			var pkgsRes struct {
+				Packages []PlanPackageItem `json:"packages"`
+			}
+			_ = apiClient.Get("/api/plans/packages", token, &pkgsRes)
+
+			var payRes struct {
+				Data []PaymentRecord `json:"data"`
+			}
+			_ = apiClient.Get("/api/me/payments", token, &payRes)
+
+			packagesHTML := `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">`
+			for _, pkg := range pkgsRes.Packages {
+				packagesHTML += fmt.Sprintf(`
+                <div style="background: #ffffff; border: 2px solid var(--border); border-radius: 1rem; padding: 2rem; display: flex; flex-direction: column; justify-content: space-between; position: relative; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3 style="font-size: 1.3rem; font-weight: 800;">%s</h3>
+                            <span style="background: #eff6ff; color: var(--primary); padding: 0.25rem 0.65rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">+%d Imóveis</span>
+                        </div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">%s</p>
+                        <div style="font-size: 2rem; font-weight: 800; color: var(--text-main); margin-bottom: 1.5rem;">%s</div>
+                    </div>
+                    <button onclick="abrirCheckoutPix('%s', '%s', '%s')" class="btn btn-primary" style="width: 100%%; padding: 0.75rem;">
+                        Pagar via Pix Instantâneo
+                    </button>
+                </div>`, pkg.Title, pkg.Listings, pkg.Description, pkg.PriceFormatted, pkg.ID, pkg.Title, pkg.PriceFormatted)
+			}
+			packagesHTML += `</div>`
+
+			historyHTML := ""
+			if len(payRes.Data) == 0 {
+				historyHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--text-muted); background: #fff; border-radius: 0.75rem; border: 1px dashed var(--border);">Nenhum pagamento realizado ainda.</div>`
+			} else {
+				historyHTML = `<div style="background: #fff; border-radius: 0.75rem; border: 1px solid var(--border); overflow: hidden;">
+                <table style="width: 100%%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                            <th style="padding: 1rem;">Data</th>
+                            <th style="padding: 1rem;">Descrição</th>
+                            <th style="padding: 1rem;">Valor</th>
+                            <th style="padding: 1rem;">Método</th>
+                            <th style="padding: 1rem;">Status</th>
+                            <th style="padding: 1rem;">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody>`
+				for _, p := range payRes.Data {
+					statusBadge := `<span style="background: #fef3c7; color: #b45309; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.75rem;">PENDENTE</span>`
+					actionBtn := ""
+					if p.Status == "PAID" {
+						statusBadge = `<span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.75rem;">PAGO</span>`
+					} else {
+						actionBtn = fmt.Sprintf(`<button onclick="simularAprovacao('%s')" class="btn btn-outline" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">⚡ Simular Aprovação</button>`, p.ID)
+					}
+
+					historyHTML += fmt.Sprintf(`
+                    <tr style="border-bottom: 1px solid var(--border);">
+                        <td style="padding: 1rem;">%s</td>
+                        <td style="padding: 1rem; font-weight: 600;">+%d Anúncios Adicionais</td>
+                        <td style="padding: 1rem;">R$ %.2f</td>
+                        <td style="padding: 1rem;">%s</td>
+                        <td style="padding: 1rem;">%s</td>
+                        <td style="padding: 1rem;">%s</td>
+                    </tr>`, p.CreatedAt[:10], p.ItemsCount, p.Amount, p.Method, statusBadge, actionBtn)
+				}
+				historyHTML += `</tbody></table></div>`
+			}
+
+			mainContent = fmt.Sprintf(`
+            <div style="margin-bottom: 2rem;">
+                <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Planos & Cotas de Anúncio</h1>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                    Seu limite atual é de <strong>%d anúncios</strong> (utilizando %d). Adquira pacotes permanentes e amplie seu catálogo.
+                </p>
+            </div>
+
+            <div style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #fff; padding: 2rem; border-radius: 1rem; margin-bottom: 2.5rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 700;">Capacidade de Anúncios</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; margin-top: 0.25rem;">%d / %d <span style="font-size: 1rem; font-weight: 500; color: #cbd5e1;">ativos</span></div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.9rem; color: #94a3b8;">Status da Conta</div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">Ativo &bull; Freemium / Recorrente</div>
+                </div>
+            </div>
+
+            <h2 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 1.25rem;">Escolha um Pacote de Anúncios</h2>
+            %s
+
+            <h2 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 1.25rem; margin-top: 2rem;">Histórico de Pagamentos</h2>
+            %s`, meRes.Quota.Limit, meRes.Quota.Used, meRes.Quota.Used, meRes.Quota.Limit, packagesHTML, historyHTML)
 
 		} else if tab == "perfil" {
 			perfilClass = "active"
@@ -791,6 +913,10 @@ func main() {
                 <a href="/painel/propostas" class="sidebar-link ` + propostasClass + `">
                     <span class="icon">📬</span>
                     <span>Propostas</span>
+                </a>
+                <a href="/painel/financeiro" class="sidebar-link ` + financeiroClass + `">
+                    <span class="icon">💳</span>
+                    <span>Planos & Cotas</span>
                 </a>
                 <a href="/painel/perfil" class="sidebar-link ` + perfilClass + `">
                     <span class="icon">👤</span>
@@ -901,7 +1027,102 @@ func main() {
         </div>
     </div>
 
+    <!-- MODAL DE CHECKOUT PIX -->
+    <div id="modal-pix" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
+        <div class="form-container" style="margin: auto; max-width: 500px; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 id="pix-title" style="font-size: 1.35rem; font-weight: 700;">Pagamento Pix</h3>
+                <button onclick="fecharModalPix()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <div id="pix-loading" style="padding: 2rem; color: var(--text-muted);">
+                <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
+                Gerando QR Code Pix junto ao Asaas...
+            </div>
+            <div id="pix-content" style="display: none;">
+                <p style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 1rem;">Abra o app do seu banco e escaneie o código abaixo:</p>
+                <div style="background: #fff; padding: 1rem; border-radius: 0.75rem; display: inline-block; border: 1px solid var(--border); margin-bottom: 1rem;">
+                    <img id="pix-qr-img" src="" alt="QR Code Pix" style="max-width: 200px; height: auto;">
+                </div>
+                <div class="form-group">
+                    <label style="text-align: left;">Código Pix Copia e Cola:</label>
+                    <input id="pix-code-input" class="form-control" type="text" readonly style="font-size: 0.8rem; background: #f1f5f9;">
+                </div>
+                <button onclick="copiarPixCode()" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">📋 Copiar Código Pix</button>
+                <p id="copy-feedback" style="color: #15803d; font-size: 0.85rem; margin-top: 0.5rem; display: none;">Código copiado para a área de transferência!</p>
+                <div style="margin-top: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Identificamos o pagamento automaticamente.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        let pixPollInterval = null;
+
+        function fecharModalPix() {
+            document.getElementById('modal-pix').style.display = 'none';
+            if (pixPollInterval) clearInterval(pixPollInterval);
+        }
+
+        async function abrirCheckoutPix(pkgId, title, price) {
+            document.getElementById('pix-title').innerText = 'Pagamento Pix — ' + title;
+            document.getElementById('modal-pix').style.display = 'block';
+            document.getElementById('pix-loading').style.display = 'block';
+            document.getElementById('pix-content').style.display = 'none';
+
+            try {
+                const res = await fetch('/painel/financeiro/checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'package_id=' + encodeURIComponent(pkgId)
+                });
+                const data = await res.json();
+                if (data.payment && data.payment.pix_qr_base64) {
+                    document.getElementById('pix-loading').style.display = 'none';
+                    document.getElementById('pix-content').style.display = 'block';
+                    document.getElementById('pix-qr-img').src = 'data:image/png;base64,' + data.payment.pix_qr_base64;
+                    document.getElementById('pix-code-input').value = data.payment.pix_code;
+
+                    // Polling de verificação de status a cada 3 segundos
+                    if (pixPollInterval) clearInterval(pixPollInterval);
+                    pixPollInterval = setInterval(async () => {
+                        const statusRes = await fetch('/painel/financeiro/status/' + data.payment.id);
+                        const statusData = await statusRes.json();
+                        if (statusData.status === 'PAID') {
+                            clearInterval(pixPollInterval);
+                            alert('🎉 Pagamento confirmado! Suas novas cotas foram liberadas com sucesso.');
+                            window.location.reload();
+                        }
+                    }, 3000);
+                } else {
+                    alert('Erro ao gerar cobrança Pix. Tente novamente.');
+                    fecharModalPix();
+                }
+            } catch (err) {
+                alert('Erro de conexão com o servidor.');
+                fecharModalPix();
+            }
+        }
+
+        function copiarPixCode() {
+            const input = document.getElementById('pix-code-input');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            document.getElementById('copy-feedback').style.display = 'block';
+            setTimeout(() => { document.getElementById('copy-feedback').style.display = 'none'; }, 3000);
+        }
+
+        async function simularAprovacao(paymentId) {
+            if (!confirm('Deseja simular a aprovação instantânea desta fatura via webhook/trigger?')) return;
+            const res = await fetch('/painel/financeiro/simular/' + paymentId, { method: 'POST' });
+            if (res.ok) {
+                alert('Pagamento aprovado e cota adicionada!');
+                window.location.reload();
+            } else {
+                alert('Erro ao processar aprovação.');
+            }
+        }
+
         function abrirModalCriacao() {
             document.getElementById('modal-title').innerText = 'Publicar Novo Imóvel';
             document.getElementById('btn-submit-modal').innerText = 'Publicar Agora';
@@ -991,6 +1212,51 @@ func main() {
 </body>
 </html>`
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+	})
+
+	// Endpoints de Pagamento / Financeiro no Frontend
+	r.POST("/painel/financeiro/checkout", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		payload := map[string]interface{}{
+			"package_id": c.PostForm("package_id"),
+		}
+		var apiRes struct {
+			Payment PaymentRecord   `json:"payment"`
+			Package PlanPackageItem `json:"package"`
+		}
+		err := apiClient.Post("/api/payments/checkout", payload, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Falha no checkout"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	r.GET("/painel/financeiro/status/:id", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		paymentID := c.Param("id")
+		var apiRes struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		err := apiClient.Get("/api/payments/"+paymentID+"/status", token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao consultar status"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	r.POST("/painel/financeiro/simular/:id", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		paymentID := c.Param("id")
+		var apiRes map[string]interface{}
+		err := apiClient.Post("/api/payments/"+paymentID+"/simulate-approval", nil, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao simular"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
 	})
 
 	// Handlers de Perfil e Senha

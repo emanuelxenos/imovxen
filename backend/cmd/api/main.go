@@ -15,6 +15,7 @@ import (
 	"github.com/imovxen/backend/internal/config"
 	"github.com/imovxen/backend/internal/db"
 	"github.com/imovxen/backend/internal/leads"
+	"github.com/imovxen/backend/internal/payments"
 	"github.com/imovxen/backend/internal/properties"
 	"github.com/imovxen/backend/internal/storage"
 	"github.com/imovxen/backend/internal/users"
@@ -47,6 +48,7 @@ func main() {
 	usersHandler := users.NewHandler(database, tokenService)
 	propertiesHandler := properties.NewHandler(database, tokenService)
 	leadsHandler := leads.NewHandler(database, tokenService)
+	paymentsHandler := payments.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production")
 
 	r := gin.Default()
 
@@ -99,6 +101,14 @@ func main() {
 		api.GET("/me/properties", authMiddleware, propertiesHandler.ListMyProperties)
 		api.PATCH("/properties/:id", authMiddleware, propertiesHandler.UpdateProperty)
 		api.DELETE("/properties/:id", authMiddleware, propertiesHandler.DeleteProperty)
+
+		// Financeiro & Pagamentos Asaas
+		api.GET("/plans/packages", paymentsHandler.GetPackages)
+		api.POST("/payments/checkout", authMiddleware, paymentsHandler.CheckoutPack)
+		api.GET("/me/payments", authMiddleware, paymentsHandler.ListMyPayments)
+		api.GET("/payments/:id/status", authMiddleware, paymentsHandler.GetPaymentStatus)
+		api.POST("/payments/webhook/asaas", paymentsHandler.WebhookAsaas)
+		api.POST("/payments/:id/simulate-approval", authMiddleware, paymentsHandler.SimulatePaymentApproval)
 	}
 
 	srv := &http.Server{
