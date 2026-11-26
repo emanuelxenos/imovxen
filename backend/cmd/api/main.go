@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/imovxen/backend/internal/auth"
 	"github.com/imovxen/backend/internal/config"
+	"github.com/imovxen/backend/internal/contracts"
 	"github.com/imovxen/backend/internal/db"
 	"github.com/imovxen/backend/internal/leads"
 	"github.com/imovxen/backend/internal/payments"
@@ -49,6 +50,7 @@ func main() {
 	propertiesHandler := properties.NewHandler(database, tokenService)
 	leadsHandler := leads.NewHandler(database, tokenService)
 	paymentsHandler := payments.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production")
+	contractsHandler := contracts.NewHandler(database, tokenService, os.Getenv("ASAAS_API_KEY"), os.Getenv("ASAAS_ENV") == "production")
 
 	r := gin.Default()
 
@@ -109,6 +111,14 @@ func main() {
 		api.GET("/payments/:id/status", authMiddleware, paymentsHandler.GetPaymentStatus)
 		api.POST("/payments/webhook/asaas", paymentsHandler.WebhookAsaas)
 		api.POST("/payments/:id/simulate-approval", authMiddleware, paymentsHandler.SimulatePaymentApproval)
+
+		// Contratos & Carnê de Locação (Baixa Manual Escalonada R$ 3, 5, 7)
+		api.POST("/contracts", authMiddleware, contractsHandler.CreateContract)
+		api.GET("/me/contracts", authMiddleware, contractsHandler.ListMyContracts)
+		api.GET("/contracts/:id", authMiddleware, contractsHandler.GetContractDetail)
+		api.POST("/contracts/installments/:id/manual-fee-checkout", authMiddleware, contractsHandler.CheckoutManualFee)
+		api.POST("/contracts/installments/:id/confirm-manual-payment", authMiddleware, contractsHandler.ConfirmManualPayment)
+		api.POST("/contracts/installments/:id/reissue", authMiddleware, contractsHandler.ReissueInstallment)
 	}
 
 	srv := &http.Server{

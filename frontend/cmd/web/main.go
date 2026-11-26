@@ -74,6 +74,32 @@ type PlanPackageItem struct {
 	PriceFormatted string  `json:"price_formatted"`
 }
 
+type ContractItem struct {
+	ID             string  `json:"id"`
+	PropertyID     string  `json:"property_id"`
+	PropertyTitle  string  `json:"property_title"`
+	PropertyCity   string  `json:"property_city"`
+	PropertyState  string  `json:"property_state"`
+	TenantName     string  `json:"tenant_name"`
+	TenantPhone    *string `json:"tenant_phone"`
+	RentAmount     float64 `json:"rent_amount"`
+	DueDay         int     `json:"due_day"`
+	DurationMonths int     `json:"duration_months"`
+	Status         string  `json:"status"`
+}
+
+type InstallmentItem struct {
+	ID                string  `json:"id"`
+	InstallmentNumber int     `json:"installment_number"`
+	DueDate           string  `json:"due_date"`
+	Amount            float64 `json:"amount"`
+	Status            string  `json:"status"`
+	ManualFeeAmount   float64 `json:"manual_fee_amount"`
+	PaidAt            *string `json:"paid_at"`
+	PaymentMethod     *string `json:"payment_method"`
+	ReceiptCode       *string `json:"receipt_code"`
+}
+
 func parsePhotos(coverURL *string) []string {
 	defaultPhotos := []string{
 		"https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
@@ -631,6 +657,7 @@ func main() {
 		// Classes ativas para a Sidebar
 		imoveisClass := ""
 		propostasClass := ""
+		contratosClass := ""
 		financeiroClass := ""
 		perfilClass := ""
 
@@ -718,6 +745,83 @@ func main() {
                 </p>
             </div>
             %s`, leadsHTML)
+
+		} else if tab == "contratos" {
+			contratosClass = "active"
+			pageTitle = "Contratos & Carnê de Locação"
+
+			var contractsRes struct {
+				Data []ContractItem `json:"data"`
+			}
+			_ = apiClient.Get("/api/me/contracts", token, &contractsRes)
+
+			contractsListHTML := ""
+			if len(contractsRes.Data) == 0 {
+				contractsListHTML = `<div style="background: #fff; padding: 4rem; text-align: center; border-radius: 1rem; border: 1px dashed var(--border); color: var(--text-muted);">
+                    <p style="font-size: 1.1rem; font-weight: 600;">Nenhum contrato de aluguel ativo.</p>
+                    <p style="font-size: 0.9rem; margin-top: 0.25rem;">Vincule um inquilino a um de seus imóveis para gerar o carnê mensal de cobrança e recibos.</p>
+                    <button onclick="abrirModalContrato()" class="btn btn-primary" style="margin-top: 1.5rem;">+ Cadastrar Novo Contrato</button>
+                </div>`
+			} else {
+				contractsListHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem;">`
+				for _, c := range contractsRes.Data {
+					phoneVal := "—"
+					if c.TenantPhone != nil && *c.TenantPhone != "" {
+						phoneVal = *c.TenantPhone
+					}
+					contractsListHTML += fmt.Sprintf(`
+                    <div style="background: #ffffff; padding: 1.5rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <span class="badge-purpose" style="position: static;">Ativo</span>
+                                <span style="font-size: 0.85rem; color: var(--text-muted);">Vencimento: Dia %d</span>
+                            </div>
+                            <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 0.25rem;">%s</h3>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">📍 %s - %s</div>
+                            <div style="background: #f8fafc; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem;">
+                                <div><strong>Inquilino:</strong> %s</div>
+                                <div><strong>WhatsApp:</strong> %s</div>
+                                <div style="margin-top: 0.25rem; font-size: 1.1rem; font-weight: 800; color: var(--text-main);">R$ %.2f / mês</div>
+                            </div>
+                        </div>
+                        <button onclick="carregarCarneContrato('%s', '%s', %.2f)" class="btn btn-primary" style="width: 100%%; padding: 0.65rem;">
+                            📑 Abrir Carnê Mensal
+                        </button>
+                    </div>`, c.DueDay, c.PropertyTitle, c.PropertyCity, c.PropertyState, c.TenantName, phoneVal, c.RentAmount, c.ID, c.PropertyTitle, c.RentAmount)
+				}
+				contractsListHTML += `</div>`
+			}
+
+			// Renderizar opções de imóveis do usuário para o modal de contrato
+			propsOptionsHTML := ""
+			for _, p := range propsRes.Data {
+				propsOptionsHTML += fmt.Sprintf(`<option value="%s">%s (R$ %.2f)</option>`, p.ID, p.Title, p.Price)
+			}
+
+			mainContent = fmt.Sprintf(`
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                <div>
+                    <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Contratos & Carnê de Locação</h1>
+                    <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                        Gerencie os aluguéis, dê baixa manual com recibo em PDF ou reemita cobranças com novo prazo.
+                    </p>
+                </div>
+                <button onclick="abrirModalContrato()" class="btn btn-primary">+ Novo Contrato</button>
+            </div>
+
+            <!-- Tabela comparativa de taxa da baixa manual -->
+            <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+                <div style="font-size: 1.5rem;">💡</div>
+                <div style="flex: 1; font-size: 0.9rem; color: #1e3a8a;">
+                    <strong>Taxa de Serviço para Baixa Manual & Emissão de Recibo:</strong><br>
+                    Aluguel até R$ 500: <strong>R$ 3,00</strong> &bull; De R$ 501 a R$ 1.500: <strong>R$ 5,00</strong> &bull; Acima de R$ 1.500: <strong>R$ 7,00</strong>.
+                </div>
+            </div>
+
+            <div id="contratos-grid">%s</div>
+
+            <!-- Container dinâmico do Carnê do Contrato Selecionado -->
+            <div id="carne-container" style="display: none; margin-top: 3rem;"></div>`, contractsListHTML)
 
 		} else if tab == "financeiro" {
 			financeiroClass = "active"
@@ -914,6 +1018,10 @@ func main() {
                     <span class="icon">📬</span>
                     <span>Propostas</span>
                 </a>
+                <a href="/painel/contratos" class="sidebar-link ` + contratosClass + `">
+                    <span class="icon">📜</span>
+                    <span>Contratos & Carnê</span>
+                </a>
                 <a href="/painel/financeiro" class="sidebar-link ` + financeiroClass + `">
                     <span class="icon">💳</span>
                     <span>Planos & Cotas</span>
@@ -1027,6 +1135,54 @@ func main() {
         </div>
     </div>
 
+    <!-- MODAL DE CADASTRO DE CONTRATO -->
+    <div id="modal-contrato" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
+        <div class="form-container" style="margin: auto; max-width: 580px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 style="font-size: 1.35rem; font-weight: 700;">Novo Contrato de Locação</h3>
+                <button onclick="fecharModalContrato()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <div id="contrato-feedback"></div>
+            <form onsubmit="salvarNovoContrato(event)">
+                <div class="form-group">
+                    <label>Selecione o Imóvel</label>
+                    <select id="contrato-property-id" class="form-control" required>
+                        <option value="">Selecione um imóvel...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nome do Inquilino</label>
+                    <input id="contrato-tenant-name" class="form-control" type="text" required placeholder="Nome completo do inquilino">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>WhatsApp / Telefone</label>
+                        <input id="contrato-tenant-phone" class="form-control" type="text" placeholder="(11) 99999-9999">
+                    </div>
+                    <div class="form-group">
+                        <label>CPF do Inquilino</label>
+                        <input id="contrato-tenant-cpf" class="form-control" type="text" placeholder="000.000.000-00">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label>Aluguel (R$)</label>
+                        <input id="contrato-rent-amount" class="form-control" type="number" step="0.01" required placeholder="Ex: 450.00">
+                    </div>
+                    <div class="form-group">
+                        <label>Dia Vencimento</label>
+                        <input id="contrato-due-day" class="form-control" type="number" min="1" max="31" required value="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Meses (Duração)</label>
+                        <input id="contrato-duration" class="form-control" type="number" min="1" max="60" required value="12">
+                    </div>
+                </div>
+                <button type="submit" id="btn-submit-contrato" class="btn btn-primary" style="width: 100%; margin-top: 1rem; padding: 0.85rem;">Gerar Contrato & Carnê</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL DE CHECKOUT PIX -->
     <div id="modal-pix" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
         <div class="form-container" style="margin: auto; max-width: 500px; text-align: center;">
@@ -1057,6 +1213,157 @@ func main() {
     </div>
 
     <script>
+        function abrirModalContrato() {
+            document.getElementById('modal-contrato').style.display = 'block';
+            fetch('/painel/imoveis/opcoes')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var select = document.getElementById('contrato-property-id');
+                    select.innerHTML = '<option value="">Selecione um imóvel...</option>';
+                    if (data.data) {
+                        data.data.forEach(function(p) {
+                            var opt = document.createElement('option');
+                            opt.value = p.id;
+                            opt.textContent = p.title + ' (R$ ' + p.price.toFixed(2) + ')';
+                            select.appendChild(opt);
+                        });
+                    }
+                });
+        }
+
+        function fecharModalContrato() {
+            document.getElementById('modal-contrato').style.display = 'none';
+        }
+
+        async function salvarNovoContrato(e) {
+            e.preventDefault();
+            var btn = document.getElementById('btn-submit-contrato');
+            btn.innerText = 'Gerando carnê...';
+            btn.disabled = true;
+
+            var postData = new URLSearchParams();
+            postData.append('property_id', document.getElementById('contrato-property-id').value);
+            postData.append('tenant_name', document.getElementById('contrato-tenant-name').value);
+            postData.append('tenant_phone', document.getElementById('contrato-tenant-phone').value);
+            postData.append('tenant_cpf', document.getElementById('contrato-tenant-cpf').value);
+            postData.append('rent_amount', document.getElementById('contrato-rent-amount').value);
+            postData.append('due_day', document.getElementById('contrato-due-day').value);
+            postData.append('duration_months', document.getElementById('contrato-duration').value);
+
+            var res = await fetch('/painel/contratos/novo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: postData.toString()
+            });
+
+            if (res.ok) {
+                alert('Contrato cadastrado com sucesso! As parcelas do carnê foram geradas.');
+                window.location.reload();
+            } else {
+                document.getElementById('contrato-feedback').innerHTML = '<div class="alert alert-danger">Erro ao criar contrato.</div>';
+                btn.innerText = 'Gerar Contrato & Carnê';
+                btn.disabled = false;
+            }
+        }
+
+        async function carregarCarneContrato(contractId, propertyTitle, rentAmount) {
+            var container = document.getElementById('carne-container');
+            container.style.display = 'block';
+            container.innerHTML = '<div style="text-align:center; padding: 2rem;">Carregando carnê de locação...</div>';
+            container.scrollIntoView({ behavior: 'smooth' });
+
+            var res = await fetch('/painel/contratos/' + contractId + '/carne');
+            var data = await res.json();
+
+            var feeLabel = 'R$ 7,00';
+            if (rentAmount <= 500) feeLabel = 'R$ 3,00';
+            else if (rentAmount <= 1500) feeLabel = 'R$ 5,00';
+
+            var installmentsRows = '';
+            data.installments.forEach(function(inst) {
+                var badge = '<span style="background: #fef3c7; color: #b45309; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">A VENCER / PENDENTE</span>';
+                var actions = '<button onclick="darBaixaManual(\'' + inst.id + '\', ' + inst.installment_number + ', ' + inst.amount + ')" class="btn btn-primary" style="padding: 0.3rem 0.65rem; font-size: 0.8rem;">Dar Baixa Manual (' + feeLabel + ')</button> <button onclick="reemitirCobranca(\'' + inst.id + '\')" class="btn btn-outline" style="padding: 0.3rem 0.65rem; font-size: 0.8rem;">Reemitir</button>';
+
+                if (inst.status === 'PAID_MANUAL' || inst.status === 'PAID_SYSTEM') {
+                    badge = '<span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">PAGO / BAIXADO</span>';
+                    var code = inst.receipt_code || 'REC-OK';
+                    actions = '<button onclick="abrirRecibo(\'' + inst.id + '\', \'' + code + '\', ' + inst.installment_number + ', ' + inst.amount + ', \'' + inst.due_date + '\')" class="btn btn-outline" style="padding: 0.3rem 0.65rem; font-size: 0.8rem;">Ver Recibo</button>';
+                }
+
+                installmentsRows += '<tr style="border-bottom: 1px solid var(--border);">' +
+                    '<td style="padding: 1rem; font-weight: 700;">Parcela ' + inst.installment_number + '</td>' +
+                    '<td style="padding: 1rem;">' + inst.due_date.substring(0, 10) + '</td>' +
+                    '<td style="padding: 1rem; font-weight: 800;">R$ ' + inst.amount.toFixed(2) + '</td>' +
+                    '<td style="padding: 1rem;">' + badge + '</td>' +
+                    '<td style="padding: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">' + actions + '</td>' +
+                '</tr>';
+            });
+
+            container.innerHTML = '<div style="background: #ffffff; border-radius: 1rem; border: 1px solid var(--border); padding: 2rem; box-shadow: var(--shadow-sm);">' +
+                '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">' +
+                    '<div>' +
+                        '<span class="badge-purpose" style="position: static;">Carnê de Locação</span>' +
+                        '<h2 style="font-size: 1.4rem; font-weight: 800; margin-top: 0.5rem;">' + propertyTitle + '</h2>' +
+                        '<p style="color: var(--text-muted); font-size: 0.9rem;">Aluguel mensal: <strong>R$ ' + rentAmount.toFixed(2) + '</strong> &bull; Taxa de baixa manual para este imóvel: <strong>' + feeLabel + '</strong></p>' +
+                    '</div>' +
+                    '<button onclick="document.getElementById(\'carne-container\').style.display=\'none\'" class="btn btn-outline" style="font-size: 0.85rem;">Fechar Carnê</button>' +
+                '</div>' +
+                '<table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">' +
+                    '<thead>' +
+                        '<tr style="background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--text-muted);">' +
+                            '<th style="padding: 0.75rem 1rem;">Mês</th>' +
+                            '<th style="padding: 0.75rem 1rem;">Vencimento</th>' +
+                            '<th style="padding: 0.75rem 1rem;">Valor</th>' +
+                            '<th style="padding: 0.75rem 1rem;">Situação</th>' +
+                            '<th style="padding: 0.75rem 1rem; text-align: right;">Ações de Quitação</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody>' + installmentsRows + '</tbody>' +
+                '</table>' +
+            '</div>';
+        }
+
+        async function darBaixaManual(installmentId, num, amount) {
+            var fee = 7.00;
+            if (amount <= 500) fee = 3.00;
+            else if (amount <= 1500) fee = 5.00;
+
+            if (!confirm('Dar baixa manual na Parcela ' + num + '?\n\nO sistema cobrará a taxa de serviço de R$ ' + fee.toFixed(2) + ' e emitirá o Recibo Oficial de Quitação com validade jurídica.')) return;
+
+            var res = await fetch('/painel/contratos/installments/' + installmentId + '/baixar-manual', {
+                method: 'POST'
+            });
+            var data = await res.json();
+            if (res.ok) {
+                alert('Baixa manual confirmada com sucesso! Código do Recibo: ' + data.receipt_code);
+                window.location.reload();
+            } else {
+                alert('Erro ao dar baixa manual.');
+            }
+        }
+
+        async function reemitirCobranca(installmentId) {
+            var novaData = prompt('Digite a nova data de vencimento (Formato: YYYY-MM-DD):', new Date().toISOString().substring(0, 10));
+            if (!novaData) return;
+
+            var res = await fetch('/painel/contratos/installments/' + installmentId + '/reemitir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'new_due_date=' + encodeURIComponent(novaData)
+            });
+
+            if (res.ok) {
+                alert('Cobrança reemitida com sucesso para o novo vencimento!');
+                window.location.reload();
+            } else {
+                alert('Erro ao reemitir.');
+            }
+        }
+
+        function abrirRecibo(installmentId, code, num, amount, due) {
+            alert('RECIBO DE QUITAÇÃO DE ALUGUEL\n----------------------------------\nCódigo: ' + code + '\nParcela: ' + num + '\nVencimento: ' + due.substring(0, 10) + '\nValor: R$ ' + amount.toFixed(2) + '\nStatus: QUITADO INTEGRALMENTE VIA IMOVXEN\n----------------------------------\nDocumento registrado na plataforma.');
+        }
+
         let pixPollInterval = null;
 
         function fecharModalPix() {
@@ -1254,6 +1561,85 @@ func main() {
 		err := apiClient.Post("/api/payments/"+paymentID+"/simulate-approval", nil, token, &apiRes)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao simular"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	// Opções de imóveis para selects
+	r.GET("/painel/imoveis/opcoes", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		var propsRes struct {
+			Data []PropertyItem `json:"data"`
+		}
+		_ = apiClient.Get("/api/me/properties", token, &propsRes)
+		c.JSON(http.StatusOK, propsRes)
+	})
+
+	// Endpoints de Contratos e Carnê no Frontend
+	r.POST("/painel/contratos/novo", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		rent, _ := strconv.ParseFloat(c.PostForm("rent_amount"), 64)
+		day, _ := strconv.Atoi(c.PostForm("due_day"))
+		duration, _ := strconv.Atoi(c.PostForm("duration_months"))
+
+		payload := map[string]interface{}{
+			"property_id":     c.PostForm("property_id"),
+			"tenant_name":     c.PostForm("tenant_name"),
+			"tenant_phone":    c.PostForm("tenant_phone"),
+			"tenant_cpf":      c.PostForm("tenant_cpf"),
+			"rent_amount":     rent,
+			"due_day":         day,
+			"duration_months": duration,
+		}
+
+		var apiRes map[string]interface{}
+		err := apiClient.Post("/api/contracts", payload, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar contrato"})
+			return
+		}
+		c.JSON(http.StatusCreated, apiRes)
+	})
+
+	r.GET("/painel/contratos/:id/carne", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		contractID := c.Param("id")
+		var apiRes struct {
+			Contract     ContractItem      `json:"contract"`
+			Installments []InstallmentItem `json:"installments"`
+			ManualFee    float64           `json:"manual_fee"`
+		}
+		err := apiClient.Get("/api/contracts/"+contractID, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao buscar carnê"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	r.POST("/painel/contratos/installments/:id/baixar-manual", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		instID := c.Param("id")
+		var apiRes map[string]interface{}
+		err := apiClient.Post("/api/contracts/installments/"+instID+"/confirm-manual-payment", nil, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao baixar"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	r.POST("/painel/contratos/installments/:id/reemitir", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		instID := c.Param("id")
+		payload := map[string]interface{}{
+			"new_due_date": c.PostForm("new_due_date"),
+		}
+		var apiRes map[string]interface{}
+		err := apiClient.Post("/api/contracts/installments/"+instID+"/reissue", payload, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao reemitir"})
 			return
 		}
 		c.JSON(http.StatusOK, apiRes)
