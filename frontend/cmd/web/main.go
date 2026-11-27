@@ -687,6 +687,7 @@ func main() {
 		propostasClass := ""
 		contratosClass := ""
 		financeiroClass := ""
+		pedidosClass := ""
 		perfilClass := ""
 
 		mainContent := ""
@@ -866,12 +867,7 @@ func main() {
 			}
 			_ = apiClient.Get("/api/plans/packages", token, &pkgsRes)
 
-			var payRes struct {
-				Data []PaymentRecord `json:"data"`
-			}
-			_ = apiClient.Get("/api/me/payments", token, &payRes)
-
-			packagesHTML := `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">`
+			packagesHTML := `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">`
 			for _, pkg := range pkgsRes.Packages {
 				packagesHTML += fmt.Sprintf(`
                 <div style="background: #ffffff; border: 2px solid var(--border); border-radius: 1rem; padding: 2rem; display: flex; flex-direction: column; justify-content: space-between; position: relative; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">
@@ -890,45 +886,6 @@ func main() {
 			}
 			packagesHTML += `</div>`
 
-			historyHTML := ""
-			if len(payRes.Data) == 0 {
-				historyHTML = `<div style="padding: 2.5rem; text-align: center; color: var(--text-muted); background: #fff; border-radius: 0.75rem; border: 1px dashed var(--border);">Nenhum pagamento realizado ainda.</div>`
-			} else {
-				historyHTML = `<div style="background: #fff; border-radius: 0.75rem; border: 1px solid var(--border); overflow: hidden;">
-                <table style="width: 100%%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
-                    <thead>
-                        <tr style="background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--text-muted);">
-                            <th style="padding: 1rem;">Data</th>
-                            <th style="padding: 1rem;">Descrição</th>
-                            <th style="padding: 1rem;">Valor</th>
-                            <th style="padding: 1rem;">Método</th>
-                            <th style="padding: 1rem;">Status</th>
-                            <th style="padding: 1rem;">Ação</th>
-                        </tr>
-                    </thead>
-                    <tbody>`
-				for _, p := range payRes.Data {
-					statusBadge := `<span style="background: #fef3c7; color: #b45309; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.75rem;">PENDENTE</span>`
-					actionBtn := ""
-					if p.Status == "PAID" {
-						statusBadge = `<span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600; font-size: 0.75rem;">PAGO</span>`
-					} else {
-						actionBtn = fmt.Sprintf(`<button onclick="simularAprovacao('%s')" class="btn btn-outline" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">⚡ Simular Aprovação</button>`, p.ID)
-					}
-
-					historyHTML += fmt.Sprintf(`
-                    <tr style="border-bottom: 1px solid var(--border);">
-                        <td style="padding: 1rem;">%s</td>
-                        <td style="padding: 1rem; font-weight: 600;">+%d Anúncios Adicionais</td>
-                        <td style="padding: 1rem;">R$ %.2f</td>
-                        <td style="padding: 1rem;">%s</td>
-                        <td style="padding: 1rem;">%s</td>
-                        <td style="padding: 1rem;">%s</td>
-                    </tr>`, p.CreatedAt[:10], p.ItemsCount, p.Amount, p.Method, statusBadge, actionBtn)
-				}
-				historyHTML += `</tbody></table></div>`
-			}
-
 			mainContent = fmt.Sprintf(`
             <div style="margin-bottom: 2rem;">
                 <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Planos & Cotas de Anúncio</h1>
@@ -945,14 +902,79 @@ func main() {
                 <div style="text-align: right;">
                     <div style="font-size: 0.9rem; color: #94a3b8;">Status da Conta</div>
                     <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8;">Ativo &bull; Freemium / Recorrente</div>
+                    <div style="margin-top: 0.5rem;"><a href="/painel/pedidos" style="color: #94a3b8; font-size: 0.85rem; text-decoration: underline;">Ver histórico de pedidos &rarr;</a></div>
                 </div>
             </div>
 
             <h2 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 1.25rem;">Escolha um Pacote de Anúncios</h2>
-            %s
+            %s`, meRes.Quota.Limit, meRes.Quota.Used, meRes.Quota.Used, meRes.Quota.Limit, packagesHTML)
 
-            <h2 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 1.25rem; margin-top: 2rem;">Histórico de Pagamentos</h2>
-            %s`, meRes.Quota.Limit, meRes.Quota.Used, meRes.Quota.Used, meRes.Quota.Limit, packagesHTML, historyHTML)
+		} else if tab == "pedidos" {
+			pedidosClass = "active"
+			pageTitle = "Meus Pedidos & Faturas"
+
+			var payRes struct {
+				Data []PaymentRecord `json:"data"`
+			}
+			_ = apiClient.Get("/api/me/payments", token, &payRes)
+
+			historyHTML := ""
+			if len(payRes.Data) == 0 {
+				historyHTML = `<div style="padding: 4rem 2rem; text-align: center; color: var(--text-muted); background: #fff; border-radius: 1rem; border: 1px dashed var(--border);">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🧾</div>
+                    <p style="font-size: 1.1rem; font-weight: 600;">Nenhum pedido realizado até o momento.</p>
+                    <p style="margin-top: 0.25rem;">Quando você adquirir pacotes de anúncios ou pagar taxas, suas faturas aparecerão aqui.</p>
+                    <a href="/painel/financeiro" class="btn btn-primary" style="margin-top: 1.5rem;">Explorar Pacotes de Anúncios</a>
+                </div>`
+			} else {
+				historyHTML = `<div style="background: #fff; border-radius: 1rem; border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow-sm);">
+                <table style="width: 100%%; border-collapse: collapse; text-align: left; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 1px solid var(--border); color: var(--text-muted);">
+                            <th style="padding: 1.1rem 1.25rem;">Data</th>
+                            <th style="padding: 1.1rem 1.25rem;">Pedido / Descrição</th>
+                            <th style="padding: 1.1rem 1.25rem;">Valor</th>
+                            <th style="padding: 1.1rem 1.25rem;">Forma de Pagamento</th>
+                            <th style="padding: 1.1rem 1.25rem;">Status</th>
+                            <th style="padding: 1.1rem 1.25rem; text-align: right;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>`
+				for _, p := range payRes.Data {
+					statusBadge := `<span style="background: #fef3c7; color: #b45309; padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem;">PENDENTE</span>`
+					actionBtn := ""
+					if p.Status == "PAID" {
+						statusBadge = `<span style="background: #dcfce7; color: #15803d; padding: 0.25rem 0.65rem; border-radius: 9999px; font-weight: 700; font-size: 0.75rem;">PAGO</span>`
+					} else {
+						actionBtn = fmt.Sprintf(`<button onclick="simularAprovacao('%s')" class="btn btn-outline" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">⚡ Simular Aprovação</button>`, p.ID)
+					}
+
+					desc := fmt.Sprintf("+%d Cotas de Anúncio", p.ItemsCount)
+					if p.Kind != "LISTING_PACK" {
+						desc = "Taxa de Serviço Imovxen"
+					}
+
+					historyHTML += fmt.Sprintf(`
+                    <tr style="border-bottom: 1px solid var(--border);">
+                        <td style="padding: 1.1rem 1.25rem;">%s</td>
+                        <td style="padding: 1.1rem 1.25rem; font-weight: 700; color: var(--text-main);">%s</td>
+                        <td style="padding: 1.1rem 1.25rem; font-weight: 800;">R$ %.2f</td>
+                        <td style="padding: 1.1rem 1.25rem;">%s</td>
+                        <td style="padding: 1.1rem 1.25rem;">%s</td>
+                        <td style="padding: 1.1rem 1.25rem; text-align: right;">%s</td>
+                    </tr>`, p.CreatedAt[:10], desc, p.Amount, p.Method, statusBadge, actionBtn)
+				}
+				historyHTML += `</tbody></table></div>`
+			}
+
+			mainContent = fmt.Sprintf(`
+            <div style="margin-bottom: 2rem;">
+                <h1 style="font-size: 1.85rem; font-weight: 800; letter-spacing: -0.5px;">Histórico de Pedidos & Faturas</h1>
+                <p style="color: var(--text-muted); font-size: 0.95rem; margin-top: 0.25rem;">
+                    Acompanhe todos os pagamentos realizados, recibos e compras de cotas de anúncios.
+                </p>
+            </div>
+            %s`, historyHTML)
 
 		} else if tab == "perfil" {
 			perfilClass = "active"
@@ -1059,6 +1081,10 @@ func main() {
                 <a href="/painel/financeiro" class="sidebar-link ` + financeiroClass + `">
                     <span class="icon">💳</span>
                     <span>Planos & Cotas</span>
+                </a>
+                <a href="/painel/pedidos" class="sidebar-link ` + pedidosClass + `">
+                    <span class="icon">🧾</span>
+                    <span>Meus Pedidos</span>
                 </a>
                 <a href="/painel/perfil" class="sidebar-link ` + perfilClass + `">
                     <span class="icon">👤</span>
