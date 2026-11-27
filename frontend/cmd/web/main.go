@@ -81,12 +81,31 @@ type ContractItem struct {
 	PropertyTitle  string  `json:"property_title"`
 	PropertyCity   string  `json:"property_city"`
 	PropertyState  string  `json:"property_state"`
+	TenantID       string  `json:"tenant_id"`
 	TenantName     string  `json:"tenant_name"`
+	TenantEmail    string  `json:"tenant_email"`
 	TenantPhone    *string `json:"tenant_phone"`
+	TenantCpf      *string `json:"tenant_cpf"`
 	RentAmount     float64 `json:"rent_amount"`
 	DueDay         int     `json:"due_day"`
 	DurationMonths int     `json:"duration_months"`
+	StartsAt       string  `json:"starts_at"`
+	EndedAt        *string `json:"ended_at"`
 	Status         string  `json:"status"`
+}
+
+type TenantHistoryRecord struct {
+	ContractID     string  `json:"contract_id"`
+	StartsAt       string  `json:"starts_at"`
+	EndedAt        *string `json:"ended_at"`
+	DurationMonths int     `json:"duration_months"`
+	RentAmount     float64 `json:"rent_amount"`
+	ContractStatus string  `json:"contract_status"`
+	TenantID       string  `json:"tenant_id"`
+	TenantName     string  `json:"tenant_name"`
+	TenantEmail    string  `json:"tenant_email"`
+	TenantPhone    *string `json:"tenant_phone"`
+	TenantCpf      *string `json:"tenant_cpf"`
 }
 
 type InstallmentItem struct {
@@ -155,9 +174,10 @@ func renderPropertyCard(p PropertyItem, isOwner bool) string {
 	actionButtons := ""
 	if isOwner {
 		actionButtons = fmt.Sprintf(`
-        <div style="display: flex; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem;">
-            <button onclick="event.stopPropagation(); abrirModalEdicao('%s', '%s', '%s', '%s', %.2f, '%.1f', '%s', '%s', '%s')" class="btn btn-outline" style="flex: 1; padding: 0.4rem 0.5rem; font-size: 0.85rem;">✏️ Editar</button>
-            <button onclick="event.stopPropagation(); if(confirm('Tem certeza que deseja excluir este anúncio?')) htmx.ajax('DELETE', '/painel/imoveis/%s', {target: 'body'})" class="btn btn-outline" style="color: #dc2626; border-color: #fecaca; padding: 0.4rem 0.5rem; font-size: 0.85rem;">🗑️ Excluir</button>
+        <div style="display: flex; gap: 0.5rem; margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.75rem; flex-wrap: wrap;">
+            <button onclick="event.stopPropagation(); abrirModalEdicao('%s', '%s', '%s', '%s', %.2f, '%.1f', '%s', '%s', '%s')" class="btn btn-outline" style="flex: 1; padding: 0.4rem 0.5rem; font-size: 0.8rem;">✏️ Editar</button>
+            <button onclick="event.stopPropagation(); abrirHistoricoInquilinos('%s', '%s')" class="btn btn-outline" style="flex: 1; padding: 0.4rem 0.5rem; font-size: 0.8rem;">📜 Inquilinos</button>
+            <button onclick="event.stopPropagation(); if(confirm('Tem certeza que deseja excluir este anúncio?')) htmx.ajax('DELETE', '/painel/imoveis/%s', {target: 'body'})" class="btn btn-outline" style="color: #dc2626; border-color: #fecaca; padding: 0.4rem 0.5rem; font-size: 0.8rem;">🗑️</button>
         </div>`, p.ID, p.Title, p.Type, p.Purpose, p.Price, func() float64 {
 			if p.AreaM2 != nil {
 				return *p.AreaM2
@@ -168,7 +188,7 @@ func renderPropertyCard(p PropertyItem, isOwner bool) string {
 				return *p.CoverImageUrl
 			}
 			return ""
-		}(), p.ID)
+		}(), p.ID, p.Title, p.ID)
 	}
 
 	return fmt.Sprintf(`
@@ -781,21 +801,27 @@ func main() {
                     <div style="background: #ffffff; padding: 1.5rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; justify-content: space-between;">
                         <div>
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                <span class="badge-purpose" style="position: static;">Ativo</span>
+                                <span class="badge-purpose" style="position: static;">Contrato %s</span>
                                 <span style="font-size: 0.85rem; color: var(--text-muted);">Vencimento: Dia %d</span>
                             </div>
                             <h3 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 0.25rem;">%s</h3>
                             <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">📍 %s - %s</div>
                             <div style="background: #f8fafc; padding: 0.75rem 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.9rem;">
                                 <div><strong>Inquilino:</strong> %s</div>
+                                <div><strong>E-mail:</strong> %s</div>
                                 <div><strong>WhatsApp:</strong> %s</div>
-                                <div style="margin-top: 0.25rem; font-size: 1.1rem; font-weight: 800; color: var(--text-main);">R$ %.2f / mês</div>
+                                <div style="margin-top: 0.5rem; font-size: 1.15rem; font-weight: 800; color: var(--text-main);">R$ %.2f / mês</div>
                             </div>
                         </div>
-                        <button onclick="carregarCarneContrato('%s', '%s', %.2f)" class="btn btn-primary" style="width: 100%%; padding: 0.65rem;">
-                            📑 Abrir Carnê Mensal
-                        </button>
-                    </div>`, c.DueDay, c.PropertyTitle, c.PropertyCity, c.PropertyState, c.TenantName, phoneVal, c.RentAmount, c.ID, c.PropertyTitle, c.RentAmount)
+                        <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                            <button onclick="carregarCarneContrato('%s', '%s', %.2f)" class="btn btn-primary" style="width: 100%%; padding: 0.65rem;">
+                                📑 Abrir Carnê Mensal
+                            </button>
+                            <button onclick="encerrarContrato('%s')" class="btn btn-outline" style="width: 100%%; padding: 0.4rem; font-size: 0.8rem; color: var(--text-muted);">
+                                🏁 Finalizar Contrato (Mudar Inquilino)
+                            </button>
+                        </div>
+                    </div>`, c.Status, c.DueDay, c.PropertyTitle, c.PropertyCity, c.PropertyState, c.TenantName, c.TenantEmail, phoneVal, c.RentAmount, c.ID, c.PropertyTitle, c.RentAmount, c.ID)
 				}
 				contractsListHTML += `</div>`
 			}
@@ -1143,7 +1169,7 @@ func main() {
         </div>
     </div>
 
-    <!-- MODAL DE CADASTRO DE CONTRATO -->
+    <!-- MODAL DE CADASTRO DE CONTRATO RELACIONAL -->
     <div id="modal-contrato" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
         <div class="form-container" style="margin: auto; max-width: 580px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
@@ -1158,20 +1184,18 @@ func main() {
                         <option value="">Selecione um imóvel...</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Nome do Inquilino</label>
-                    <input id="contrato-tenant-name" class="form-control" type="text" required placeholder="Nome completo do inquilino">
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="form-group">
-                        <label>WhatsApp / Telefone</label>
-                        <input id="contrato-tenant-phone" class="form-control" type="text" placeholder="(11) 99999-9999">
-                    </div>
-                    <div class="form-group">
-                        <label>CPF do Inquilino</label>
-                        <input id="contrato-tenant-cpf" class="form-control" type="text" placeholder="000.000.000-00">
+
+                <!-- BUSCA E VINCULAÇÃO REAL DE USUÁRIO DO SISTEMA -->
+                <div class="form-group" style="position: relative;">
+                    <label>Buscar Inquilino Cadastrado na Plataforma</label>
+                    <input id="busca-usuario-input" class="form-control" type="text" placeholder="Digite nome, e-mail ou telefone do inquilino..." oninput="buscarUsuariosParaContrato(this.value)">
+                    <input type="hidden" id="contrato-tenant-id" required>
+                    <div id="resultado-busca-usuarios" style="display: none; position: absolute; left: 0; right: 0; background: #fff; border: 1px solid var(--border); border-radius: 0.5rem; max-height: 200px; overflow-y: auto; z-index: 50; box-shadow: var(--shadow-lg); margin-top: 4px;"></div>
+                    <div id="inquilino-selecionado-badge" style="display: none; margin-top: 0.5rem; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; color: #065f46;">
+                        Inquilino Vinculado: <strong id="inquilino-selecionado-nome"></strong> (<span id="inquilino-selecionado-email"></span>)
                     </div>
                 </div>
+
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
                         <label>Aluguel (R$)</label>
@@ -1188,6 +1212,20 @@ func main() {
                 </div>
                 <button type="submit" id="btn-submit-contrato" class="btn btn-primary" style="width: 100%; margin-top: 1rem; padding: 0.85rem;">Gerar Contrato & Carnê</button>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE HISTÓRICO DE INQUILINOS POR IMÓVEL -->
+    <div id="modal-historico" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 100; overflow-y: auto; padding: 2.5rem 0;">
+        <div class="form-container" style="margin: auto; max-width: 650px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+                <div>
+                    <h3 id="historico-modal-title" style="font-size: 1.35rem; font-weight: 700;">Histórico de Inquilinos</h3>
+                    <p id="historico-modal-sub" style="font-size: 0.85rem; color: var(--text-muted); margin: 0;"></p>
+                </div>
+                <button onclick="fecharModalHistorico()" style="background: none; border: none; font-size: 1.75rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+            </div>
+            <div id="historico-conteudo"></div>
         </div>
     </div>
 
@@ -1221,8 +1259,104 @@ func main() {
     </div>
 
     <script>
+        function buscarUsuariosParaContrato(termo) {
+            var box = document.getElementById('resultado-busca-usuarios');
+            if (!termo || termo.length < 2) {
+                box.style.display = 'none';
+                return;
+            }
+
+            fetch('/painel/usuarios/buscar?q=' + encodeURIComponent(termo))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.users || data.users.length === 0) {
+                        box.innerHTML = '<div style="padding: 0.75rem; color: var(--text-muted); font-size: 0.85rem;">Nenhum usuário cadastrado encontrado com este termo.</div>';
+                        box.style.display = 'block';
+                        return;
+                    }
+
+                    var html = '';
+                    data.users.forEach(function(u) {
+                        html += '<div onclick="selecionarInquilinoParaContrato(\'' + u.id + '\', \'' + u.name + '\', \'' + u.email + '\')" style="padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s;" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'#fff\'">' +
+                            '<div style="font-weight: 700; font-size: 0.9rem;">' + u.name + '</div>' +
+                            '<div style="font-size: 0.75rem; color: var(--text-muted);">' + u.email + (u.phone ? ' &bull; ' + u.phone : '') + '</div>' +
+                        '</div>';
+                    });
+                    box.innerHTML = html;
+                    box.style.display = 'block';
+                });
+        }
+
+        function selecionarInquilinoParaContrato(id, name, email) {
+            document.getElementById('contrato-tenant-id').value = id;
+            document.getElementById('busca-usuario-input').value = name;
+            document.getElementById('resultado-busca-usuarios').style.display = 'none';
+            document.getElementById('inquilino-selecionado-nome').textContent = name;
+            document.getElementById('inquilino-selecionado-email').textContent = email;
+            document.getElementById('inquilino-selecionado-badge').style.display = 'block';
+        }
+
+        function abrirHistoricoInquilinos(propId, propTitle) {
+            document.getElementById('historico-modal-title').textContent = 'Inquilinos do Imóvel';
+            document.getElementById('historico-modal-sub').textContent = propTitle;
+            var box = document.getElementById('historico-conteudo');
+            box.innerHTML = '<div style="text-align: center; padding: 2rem;">Carregando histórico...</div>';
+            document.getElementById('modal-historico').style.display = 'block';
+
+            fetch('/painel/imoveis/' + propId + '/historico-inquilinos')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data.history || data.history.length === 0) {
+                        box.innerHTML = '<div style="padding: 2.5rem; text-align: center; color: var(--text-muted); background: #f8fafc; border-radius: 0.5rem; border: 1px dashed var(--border);">Nenhum inquilino registrado neste imóvel até o momento.</div>';
+                        return;
+                    }
+
+                    var html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+                    data.history.forEach(function(h) {
+                        var statusLabel = h.contract_status === 'ACTIVE' ? '<span style="background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">INQUILINO ATUAL</span>' : '<span style="background: #f1f5f9; color: #64748b; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">ENCERRADO</span>';
+                        var periodo = h.starts_at.substring(0, 10) + ' até ' + (h.ended_at ? h.ended_at.substring(0, 10) : 'Atualmente');
+
+                        html += '<div style="background: #ffffff; padding: 1.25rem; border-radius: 0.75rem; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">' +
+                            '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">' +
+                                '<div style="font-weight: 800; font-size: 1.05rem;">' + h.tenant_name + '</div>' +
+                                statusLabel +
+                            '</div>' +
+                            '<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem;">' +
+                                '📧 ' + h.tenant_email + (h.tenant_phone ? ' &bull; 📱 ' + h.tenant_phone : '') +
+                            '</div>' +
+                            '<div style="display: flex; justify-content: space-between; font-size: 0.85rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">' +
+                                '<span>Período: <strong>' + periodo + '</strong> (' + h.duration_months + ' meses)</span>' +
+                                '<span>Aluguel: <strong>R$ ' + h.rent_amount.toFixed(2) + '</strong></span>' +
+                            '</div>' +
+                        '</div>';
+                    });
+                    html += '</div>';
+                    box.innerHTML = html;
+                });
+        }
+
+        function fecharModalHistorico() {
+            document.getElementById('modal-historico').style.display = 'none';
+        }
+
+        async function encerrarContrato(contractId) {
+            if (!confirm('Deseja realmente finalizar este contrato de locação?\n\nO imóvel será liberado e este inquilino será arquivado no Histórico Permanente deste imóvel.')) return;
+
+            var res = await fetch('/painel/contratos/' + contractId + '/encerrar', { method: 'POST' });
+            if (res.ok) {
+                alert('Contrato encerrado com sucesso! Arquivado no histórico.');
+                window.location.reload();
+            } else {
+                alert('Erro ao finalizar contrato.');
+            }
+        }
+
         function abrirModalContrato() {
             document.getElementById('modal-contrato').style.display = 'block';
+            document.getElementById('contrato-tenant-id').value = '';
+            document.getElementById('busca-usuario-input').value = '';
+            document.getElementById('inquilino-selecionado-badge').style.display = 'none';
+
             fetch('/painel/imoveis/opcoes')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -1245,15 +1379,19 @@ func main() {
 
         async function salvarNovoContrato(e) {
             e.preventDefault();
+            var tenantId = document.getElementById('contrato-tenant-id').value;
+            if (!tenantId) {
+                alert('Por favor, busque e selecione um inquilino cadastrado no sistema.');
+                return;
+            }
+
             var btn = document.getElementById('btn-submit-contrato');
             btn.innerText = 'Gerando carnê...';
             btn.disabled = true;
 
             var postData = new URLSearchParams();
             postData.append('property_id', document.getElementById('contrato-property-id').value);
-            postData.append('tenant_name', document.getElementById('contrato-tenant-name').value);
-            postData.append('tenant_phone', document.getElementById('contrato-tenant-phone').value);
-            postData.append('tenant_cpf', document.getElementById('contrato-tenant-cpf').value);
+            postData.append('tenant_id', tenantId);
             postData.append('rent_amount', document.getElementById('contrato-rent-amount').value);
             postData.append('due_day', document.getElementById('contrato-due-day').value);
             postData.append('duration_months', document.getElementById('contrato-duration').value);
@@ -1268,7 +1406,8 @@ func main() {
                 alert('Contrato cadastrado com sucesso! As parcelas do carnê foram geradas.');
                 window.location.reload();
             } else {
-                document.getElementById('contrato-feedback').innerHTML = '<div class="alert alert-danger">Erro ao criar contrato.</div>';
+                var errData = await res.json();
+                document.getElementById('contrato-feedback').innerHTML = '<div class="alert alert-danger">' + (errData.error || 'Erro ao criar contrato.') + '</div>';
                 btn.innerText = 'Gerar Contrato & Carnê';
                 btn.disabled = false;
             }
@@ -1584,6 +1723,46 @@ func main() {
 		c.JSON(http.StatusOK, propsRes)
 	})
 
+	// Busca dinâmica de usuários para vincular como inquilino
+	r.GET("/painel/usuarios/buscar", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		q := c.Query("q")
+		var apiRes struct {
+			Users []struct {
+				ID    string `json:"id"`
+				Name  string `json:"name"`
+				Email string `json:"email"`
+				Phone string `json:"phone"`
+			} `json:"users"`
+		}
+		_ = apiClient.Get("/api/users/search?q="+q, token, &apiRes)
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	// Histórico de Inquilinos de um Imóvel
+	r.GET("/painel/imoveis/:id/historico-inquilinos", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		propID := c.Param("id")
+		var apiRes struct {
+			History []TenantHistoryRecord `json:"history"`
+		}
+		_ = apiClient.Get("/api/properties/"+propID+"/tenants-history", token, &apiRes)
+		c.JSON(http.StatusOK, apiRes)
+	})
+
+	// Finalizar contrato ativo e liberar imóvel
+	r.POST("/painel/contratos/:id/encerrar", func(c *gin.Context) {
+		token, _ := c.Cookie("access_token")
+		contractID := c.Param("id")
+		var apiRes map[string]interface{}
+		err := apiClient.Post("/api/contracts/"+contractID+"/finalize", nil, token, &apiRes)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao encerrar"})
+			return
+		}
+		c.JSON(http.StatusOK, apiRes)
+	})
+
 	// Endpoints de Contratos e Carnê no Frontend
 	r.POST("/painel/contratos/novo", func(c *gin.Context) {
 		token, _ := c.Cookie("access_token")
@@ -1593,9 +1772,7 @@ func main() {
 
 		payload := map[string]interface{}{
 			"property_id":     c.PostForm("property_id"),
-			"tenant_name":     c.PostForm("tenant_name"),
-			"tenant_phone":    c.PostForm("tenant_phone"),
-			"tenant_cpf":      c.PostForm("tenant_cpf"),
+			"tenant_id":       c.PostForm("tenant_id"),
 			"rent_amount":     rent,
 			"due_day":         day,
 			"duration_months": duration,
@@ -1604,7 +1781,7 @@ func main() {
 		var apiRes map[string]interface{}
 		err := apiClient.Post("/api/contracts", payload, token, &apiRes)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Erro ao criar contrato"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Erro ao criar contrato. Verifique os dados do inquilino."})
 			return
 		}
 		c.JSON(http.StatusCreated, apiRes)

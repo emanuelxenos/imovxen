@@ -114,11 +114,13 @@ func main() {
 		api.POST("/payments/webhook/asaas", paymentsHandler.WebhookAsaas)
 		api.POST("/payments/:id/simulate-approval", authMiddleware, paymentsHandler.SimulatePaymentApproval)
 
-		// Contratos & Carnê de Locação (Baixa Manual Escalonada R$ 3, 5, 7)
+		// Contratos & Carnê de Locação (Relacional + Histórico + Baixa Manual R$ 3, 5, 7)
+		api.GET("/users/search", authMiddleware, contractsHandler.SearchUsers)
 		api.POST("/contracts", authMiddleware, contractsHandler.CreateContract)
 		api.GET("/me/contracts", authMiddleware, contractsHandler.ListMyContracts)
 		api.GET("/contracts/:id", authMiddleware, contractsHandler.GetContractDetail)
-		api.POST("/contracts/installments/:id/manual-fee-checkout", authMiddleware, contractsHandler.CheckoutManualFee)
+		api.POST("/contracts/:id/finalize", authMiddleware, contractsHandler.FinalizeContract)
+		api.GET("/properties/:id/tenants-history", authMiddleware, contractsHandler.GetPropertyTenantsHistory)
 		api.POST("/contracts/installments/:id/confirm-manual-payment", authMiddleware, contractsHandler.ConfirmManualPayment)
 		api.POST("/contracts/installments/:id/reissue", authMiddleware, contractsHandler.ReissueInstallment)
 	}
